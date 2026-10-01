@@ -12,3 +12,4 @@
 - Oct 1 - Gateway checks semantic cache before provider dispatch (hits return provider 'cache' at zero cost), logs every request, exposes GET /v1/chat/stats and /v1/chat/live, serves /dashboard. Verified live: paraphrase served from cache at similarity 0.992, different question correctly missed
 - Oct 1 - Threshold tuning script added: measures paraphrase hit rate vs wrong-hit rate across similarity thresholds
 - Oct 1 - Cache settings documented in .env.example (embedding model, task type, threshold 0.92)
+- Oct 1 - Threshold tuning on 16 pairs (8 paraphrase, 8 different): default embeddings overlapped (tau=0.85 gave 25% hits), SEMANTIC_SIMILARITY task type gave 100% paraphrase hits with 0 wrong hits at tau=0.92
