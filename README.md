@@ -8,3 +8,4 @@
 - Oct 1 - Embedding module added for semantic cache (Gemini embedding API, optional SEMANTIC_SIMILARITY task type, offline mock embedder for tests)
 - Oct 1 - In-memory semantic cache added: cosine similarity, TTL, LRU eviction, per-system-prompt namespaces, savings stats
 - Oct 1 - In-memory request log added (provider, cache hit/miss, latency, cost, failovers) to feed the dashboard
+- Oct 1 - Polling dashboard added: hit rate, tokens and cost saved, spend, failover tags, recent requests, built-in prompt tester
