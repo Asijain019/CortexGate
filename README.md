@@ -9,3 +9,4 @@
 - Oct 1 - In-memory semantic cache added: cosine similarity, TTL, LRU eviction, per-system-prompt namespaces, savings stats
 - Oct 1 - In-memory request log added (provider, cache hit/miss, latency, cost, failovers) to feed the dashboard
 - Oct 1 - Polling dashboard added: hit rate, tokens and cost saved, spend, failover tags, recent requests, built-in prompt tester
+- Oct 1 - Gateway checks semantic cache before provider dispatch (hits return provider 'cache' at zero cost), logs every request, exposes GET /v1/chat/stats and /v1/chat/live, serves /dashboard. Verified live: paraphrase served from cache at similarity 0.992, different question correctly missed
