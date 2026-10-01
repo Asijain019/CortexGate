@@ -13,3 +13,13 @@
 - Oct 1 - Threshold tuning script added: measures paraphrase hit rate vs wrong-hit rate across similarity thresholds
 - Oct 1 - Cache settings documented in .env.example (embedding model, task type, threshold 0.92)
 - Oct 1 - Threshold tuning on 16 pairs (8 paraphrase, 8 different): default embeddings overlapped (tau=0.85 gave 25% hits), SEMANTIC_SIMILARITY task type gave 100% paraphrase hits with 0 wrong hits at tau=0.92
+- Oct 1 - Verified both providers live with real keys (Groq gpt-oss-20b, Gemini 3.8 flash); cost tracking confirmed on real requests
+- Oct 1 - Known issues: Gemini usage undercounts thinking tokens (cost understated) and gemini-3.8-flash is missing from the pricing table; fix pending in providers/gemini.js
+- Oct 1 - Cache verified end to end with live embeddings: paraphrase hit at similarity 0.992 (saved 119 tokens), 'capital of Italy' correctly missed
+- Oct 1 - Pull request opened from fork (Asijain019/CortexGate) with cache, request log, dashboard and threshold tuning
+
+## Next up
+- MongoDB request logging (actual cost vs counterfactual cost per request)
+- Fix Gemini token counting and pricing table
+- Mid-term demo prep (Oct 8): failover demo, cache demo, dashboard walkthrough
+- Planned later: Qdrant/pgvector, token-bucket rate limiting with queue, model cascading, React dashboard
