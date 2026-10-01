@@ -6,3 +6,4 @@
 - Sep 30 - Failover logic added to chat route with automatic retry on 5xx/429/timeout and provider logging
 - Oct 1 - Updated default Gemini model to gemini-3.8-flash (gemini-1.5-flash and 2.5-flash return 404 on new keys)
 - Oct 1 - Embedding module added for semantic cache (Gemini embedding API, optional SEMANTIC_SIMILARITY task type, offline mock embedder for tests)
+- Oct 1 - In-memory semantic cache added: cosine similarity, TTL, LRU eviction, per-system-prompt namespaces, savings stats
