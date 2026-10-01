@@ -7,3 +7,4 @@
 - Oct 1 - Updated default Gemini model to gemini-3.8-flash (gemini-1.5-flash and 2.5-flash return 404 on new keys)
 - Oct 1 - Embedding module added for semantic cache (Gemini embedding API, optional SEMANTIC_SIMILARITY task type, offline mock embedder for tests)
 - Oct 1 - In-memory semantic cache added: cosine similarity, TTL, LRU eviction, per-system-prompt namespaces, savings stats
+- Oct 1 - In-memory request log added (provider, cache hit/miss, latency, cost, failovers) to feed the dashboard
