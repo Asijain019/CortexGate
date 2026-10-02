@@ -19,4 +19,5 @@ For project documentation, see [README.md](README.md).
 - Oct 1 - Verified both providers live with real keys (Groq gpt-oss-20b, Gemini 3.8 flash); cost tracking confirmed on real requests
 - Oct 1 - Known issues: Gemini usage undercounts thinking tokens (cost understated) and gemini-3.8-flash is missing from the pricing table; fix pending in providers/gemini.js
 - Oct 1 - Cache verified end to end with live embeddings: paraphrase hit at similarity 0.992 (saved 119 tokens), 'capital of Italy' correctly missed
-
+- Oct 2 - Fixed gemini.js: default model set to gemini-3.8-flash, added pricing entry, and corrected token calculation to account for hidden thinking tokens.
+- Oct 2 - Added MongoDB request logger (mongoLogger.js) with non-blocking fire-and-forget logging and GET /v1/chat/summary aggregation endpoint.

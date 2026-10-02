@@ -1,14 +1,15 @@
 import fetch from 'node-fetch';
 
 const PRICING = {
-  'gemini-1.5-flash': { prompt: 0.075 / 1_000_000, completion: 0.30 / 1_000_000 },
-  'gemini-2.0-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
+  'gemini-3.8-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
   'gemini-2.5-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
+  'gemini-2.0-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
+  'gemini-1.5-flash': { prompt: 0.075 / 1_000_000, completion: 0.30 / 1_000_000 },
   'gemini-1.5-pro': { prompt: 1.25 / 1_000_000, completion: 5.00 / 1_000_000 },
   'gemini-1.0-pro': { prompt: 0.50 / 1_000_000, completion: 1.50 / 1_000_000 }
 };
 
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
 
 export function calculateCost(usage, model) {
   if (!usage) return 0;
@@ -123,10 +124,14 @@ export async function sendChatCompletion({ messages, model }, options = {}) {
   const content = parts.map(p => p.text || '').join('');
 
   const usageMeta = data.usageMetadata || {};
+  const total = usageMeta.totalTokenCount || 0;
+  const prompt = usageMeta.promptTokenCount || 0;
+  const candidates = usageMeta.candidatesTokenCount || 0;
+
   const usage = {
-    prompt_tokens: usageMeta.promptTokenCount || 0,
-    completion_tokens: usageMeta.candidatesTokenCount || 0,
-    total_tokens: usageMeta.totalTokenCount || (usageMeta.promptTokenCount || 0) + (usageMeta.candidatesTokenCount || 0)
+    prompt_tokens: prompt,
+    completion_tokens: total ? Math.max(0, total - prompt) : candidates,
+    total_tokens: total || prompt + candidates
   };
 
   const cleanModelName = selectedModel.replace(/^models\//, '');

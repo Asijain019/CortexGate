@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { providers, getProviderChain } from '../providers/index.js';
 import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
+import { getMongoSummary } from '../stats/mongoLogger.js';
 
 const router = Router();
 
@@ -136,6 +137,11 @@ router.get('/stats', (req, res) => {
 
 router.get('/live', (req, res) => {
   res.json({ cache: semanticCache.getStats(), ...requestLog.getLive() });
+});
+
+router.get('/summary', async (req, res) => {
+  const summary = await getMongoSummary();
+  res.json(summary);
 });
 
 export default router;

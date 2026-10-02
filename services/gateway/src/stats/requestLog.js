@@ -1,4 +1,5 @@
-// In-memory live log for the dashboard. Later: replaced/backed by MongoDB logging.
+import { logRequestToMongo } from './mongoLogger.js';
+
 const MAX_ENTRIES = 50;
 const recent = [];
 const totals = { requests: 0, spent: 0, failovers: 0, errors: 0 };
@@ -14,6 +15,9 @@ export function record(entry) {
   if (entry.failedProviders && entry.failedProviders.length > 0) totals.failovers++;
   if (entry.status === 'error') totals.errors++;
   byProvider[entry.provider] = (byProvider[entry.provider] || 0) + 1;
+
+  // Persistent MongoDB logging (fire-and-forget, non-blocking)
+  logRequestToMongo(row).catch(() => {});
 }
 
 export function getLive() {

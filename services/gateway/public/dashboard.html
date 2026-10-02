@@ -3,155 +3,530 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CortexGate Dashboard</title>
+<title>CortexGate — AI Gateway & Semantic Cache</title>
+<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2430; --muted:#6b7686; --line:#e3e7ee; --green:#1a9d5c; --blue:#2a6fdb; --amber:#c27a0a; --red:#c93b3b; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1b212a; --text:#e8ecf2; --muted:#93a0b2; --line:#2a323e; } }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:18px 24px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-  h1 { margin:0; font-size:20px; } h1 span { color:var(--muted); font-weight:400; font-size:14px; margin-left:8px; }
-  #status { font-size:13px; color:var(--muted); }
-  #status.bad { color:var(--red); }
-  main { padding:0 24px 32px; max-width:1100px; margin:0 auto; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:18px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .card .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
-  .card .value { font-size:26px; font-weight:650; margin-top:4px; }
-  .card .sub { font-size:12px; color:var(--muted); margin-top:2px; }
-  .green { color:var(--green); }
-  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
-  section h2 { margin:0 0 10px; font-size:15px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  input[type=text] { flex:1; min-width:220px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font-size:14px; }
-  button { padding:9px 16px; border:0; border-radius:8px; background:var(--blue); color:#fff; font-size:14px; cursor:pointer; }
-  button:disabled { opacity:.6; cursor:default; }
-  label.chk { font-size:13px; color:var(--muted); display:flex; gap:5px; align-items:center; }
-  #answer { margin-top:10px; font-size:14px; white-space:pre-wrap; min-height:20px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--line); }
-  td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  tr:last-child td { border-bottom:0; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-  .b-cache { background:rgba(26,157,92,.15); color:var(--green); }
-  .b-groq { background:rgba(42,111,219,.15); color:var(--blue); }
-  .b-gemini { background:rgba(194,122,10,.17); color:var(--amber); }
-  .b-none { background:rgba(201,59,59,.15); color:var(--red); }
-  .tag-fo { margin-left:6px; font-size:11px; color:var(--amber); }
-  .muted { color:var(--muted); }
-  .note { font-size:12px; color:var(--muted); margin-top:8px; }
-  .scroll { overflow-x:auto; }
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+  
+  :root {
+    --bg-main: #f3f2f8;
+    --card-bg: #ffffff;
+    --card-border: #e9e8f2;
+    --text-primary: #141324;
+    --text-muted: #64748b;
+  }
+
+  .dark {
+    --bg-main: #0b0b14;
+    --card-bg: #151428;
+    --card-border: #272545;
+    --text-primary: #f1f5f9;
+    --text-muted: #94a3b8;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  .glass-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 10px 30px -5px rgba(91, 80, 230, 0.05);
+  }
+  .dark-panel {
+    background-color: #171626;
+    color: #ffffff;
+  }
+  .purple-card {
+    background: linear-gradient(135deg, #5b50e6 0%, #4f46e5 100%);
+  }
+  .purple-subcard {
+    background-color: #26253d;
+    border: 1px solid #363456;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 99px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 99px;
+  }
 </style>
 </head>
-<body>
-<header>
-  <h1>CortexGate <span>AI gateway: live view</span></h1>
-  <div id="status">connecting...</div>
-</header>
-<main>
-  <div class="cards">
-    <div class="card"><div class="label">Requests</div><div class="value" id="c-req">0</div><div class="sub" id="c-split">0 hits / 0 misses</div></div>
-    <div class="card"><div class="label">Cache hit rate</div><div class="value" id="c-rate">0%</div><div class="sub" id="c-entries">0 entries cached</div></div>
-    <div class="card"><div class="label">Tokens saved</div><div class="value green" id="c-tok">0</div><div class="sub">served from cache</div></div>
-    <div class="card"><div class="label">Cost saved</div><div class="value green" id="c-saved">$0</div><div class="sub">counterfactual (list price)</div></div>
-    <div class="card"><div class="label">Actually spent</div><div class="value" id="c-spent">$0</div><div class="sub" id="c-fo">0 failovers</div></div>
+<body class="min-h-screen p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
+
+  <!-- Header Navigation -->
+  <header class="flex flex-col md:flex-row items-center justify-between gap-4 glass-card rounded-2xl p-4 shadow-sm transition-all duration-300">
+    <!-- Brand Logo -->
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl purple-card flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/20">
+        ⚡
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-extrabold text-lg tracking-tight text-[var(--text-primary)]">CORTEXGATE</h1>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] font-medium">Smart LLM Gateway, Semantic Caching & Failover</p>
+      </div>
+    </div>
+
+    <!-- Top Pill Nav Bar -->
+    <nav class="hidden lg:flex items-center gap-1 bg-[#171626] p-1.5 rounded-full text-xs font-semibold text-slate-300 shadow-inner">
+      <button class="px-4 py-2 rounded-full bg-[#5b50e6] text-white shadow-sm transition">✦ Overview</button>
+      <button onclick="scrollToTester()" class="px-4 py-2 rounded-full hover:text-white transition">Prompt Tester</button>
+      <button onclick="filterLogs('cache')" class="px-4 py-2 rounded-full hover:text-white transition">Cache Hits</button>
+      <button onclick="filterLogs('failover')" class="px-4 py-2 rounded-full hover:text-white transition">Failovers</button>
+      <button onclick="filterLogs('all')" class="px-4 py-2 rounded-full hover:text-white transition">Live Logs</button>
+    </nav>
+
+    <!-- Controls / System Status / Light & Dark Mode Toggle -->
+    <div class="flex items-center gap-3">
+      <div id="status-pill" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="status-text">Gateway Online</span>
+      </div>
+
+      <!-- Theme Toggle Button -->
+      <button id="theme-btn" onclick="toggleTheme()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition font-bold text-xs flex items-center gap-1.5" title="Toggle Light/Dark Mode">
+        <span id="theme-icon">🌙</span>
+      </button>
+
+      <button onclick="refreshData()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition" title="Refresh Now">
+        🔄
+      </button>
+    </div>
+  </header>
+
+  <!-- Title & Action Section -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+    <div>
+      <div class="flex items-center gap-3">
+        <h2 class="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">Gateway Dashboard</h2>
+        <span id="live-badge" class="text-xs px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold">Live Stats</span>
+      </div>
+      <p class="text-xs text-[var(--text-muted)] mt-1">Manage and track prompt cache hits, cost savings, and provider failovers in real time.</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="scrollToTester()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl purple-card text-white text-xs font-bold shadow-lg shadow-indigo-500/25 hover:opacity-95 transition">
+        <span>+ Test Gateway Prompt</span>
+      </button>
+    </div>
   </div>
 
-  <section>
-    <h2>Try a prompt</h2>
-    <div class="row">
-      <input type="text" id="prompt" placeholder="Ask something, then ask it again in different words..." />
-      <label class="chk"><input type="checkbox" id="bypass"> bypass cache</label>
-      <select id="prov" style="padding:9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
-        <option value="">auto (failover chain)</option>
-        <option value="groq">force groq first</option>
-        <option value="gemini">force gemini first</option>
-      </select>
-      <button id="send">Send</button>
+  <!-- Top Metric Cards Row (4 Cards) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    
+    <!-- Card 1: Total Requests -->
+    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total Requests</span>
+        <span class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">📊</span>
+      </div>
+      <div>
+        <div id="metric-requests" class="text-3xl font-extrabold text-[var(--text-primary)]">0</div>
+        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
+          <span id="metric-split" class="font-medium">0 hits / 0 misses</span>
+        </div>
+      </div>
+      <!-- Mini Visual Bar -->
+      <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+        <div id="bar-hits" class="h-full bg-[#5b50e6] transition-all duration-500" style="width: 0%"></div>
+        <div id="bar-misses" class="h-full bg-slate-200 dark:bg-slate-700 transition-all duration-500" style="width: 100%"></div>
+      </div>
     </div>
-    <div id="answer" class="muted"></div>
-  </section>
 
-  <section>
-    <h2>Recent requests</h2>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Time</th><th>Answered by</th><th>Prompt</th><th>Latency</th><th>Cost</th><th>Saved</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="muted">No requests yet.</td></tr></tbody>
-      </table>
+    <!-- Card 2: Cache Hit Rate -->
+    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cache Hit Rate</span>
+        <span class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-sm">⚡</span>
+      </div>
+      <div>
+        <div id="metric-hitrate" class="text-3xl font-extrabold text-[#5b50e6]">0%</div>
+        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
+          <span id="metric-entries" class="font-semibold text-[var(--text-primary)]">0 cached entries</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">Threshold: <span id="metric-threshold" class="font-bold text-[var(--text-primary)]">0.92</span></div>
     </div>
-    <div class="note">Cost saved is a counterfactual: what the avoided provider call would have cost at list price. Free-tier calls are billed at $0 in practice.</div>
-  </section>
-</main>
+
+    <!-- Card 3: Tokens & Cost Saved -->
+    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cost Saved</span>
+        <span class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">💰</span>
+      </div>
+      <div>
+        <div id="metric-saved" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">$0.00</div>
+        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
+          <span id="metric-tokens" class="font-semibold text-emerald-700 dark:text-emerald-400">0 tokens avoided</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">Counterfactual List Price</div>
+    </div>
+
+    <!-- Card 4: Total Spend & Failovers -->
+    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Actual Spend</span>
+        <span class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm">🛡️</span>
+      </div>
+      <div>
+        <div id="metric-spent" class="text-3xl font-extrabold text-[var(--text-primary)]">$0.00</div>
+        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
+          <span id="metric-failovers" class="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">0 failovers</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">Active Providers: Groq & Gemini</div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Dark Contrast Container (Request Feed & Interactive Inspector) -->
+  <div class="dark-panel rounded-[28px] p-5 sm:p-7 shadow-2xl space-y-6 border border-slate-800">
+    
+    <!-- Dark Container Tabs Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div class="flex items-center gap-2">
+        <button id="tab-all" onclick="filterLogs('all')" class="px-4 py-2 rounded-xl bg-[#5b50e6] text-white text-xs font-bold shadow-md transition">All Requests</button>
+        <button id="tab-cache" onclick="filterLogs('cache')" class="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Cache Hits</button>
+        <button id="tab-failover" onclick="filterLogs('failover')" class="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Failovers</button>
+      </div>
+      <div class="text-xs text-slate-400 font-medium flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+        <span>Polling <code class="text-indigo-300 bg-slate-800 px-1.5 py-0.5 rounded">/v1/chat/live</code> every 2s</span>
+      </div>
+    </div>
+
+    <!-- Grid Layout: Left Feed vs Right Inspector -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Left List (5 cols on lg) -->
+      <div class="lg:col-span-5 space-y-3">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Recent Request Log</h3>
+          <span id="log-count" class="text-xs text-slate-500 font-semibold">0 items</span>
+        </div>
+        
+        <div id="log-list" class="space-y-2.5 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
+          <!-- Request Rows injected dynamically -->
+          <div class="p-4 rounded-2xl purple-subcard text-slate-400 text-xs text-center">
+            No requests logged yet. Send a prompt on the right to start!
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Prompt Tester & Detail View (7 cols on lg) -->
+      <div id="tester-container" class="lg:col-span-7 space-y-5">
+        
+        <!-- Interactive Prompt Tester Card -->
+        <div class="purple-card rounded-2xl p-6 shadow-xl text-white space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-extrabold text-base flex items-center gap-2">
+              <span>✦ Interactive Gateway Tester</span>
+            </h3>
+            <span class="text-[11px] bg-white/20 text-white font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm">Live Test</span>
+          </div>
+
+          <!-- Prompt Form Controls -->
+          <div class="space-y-3">
+            <div>
+              <input type="text" id="prompt-input" placeholder="Type a prompt (e.g., What is the capital of France?)" 
+                class="w-full text-sm px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white placeholder-indigo-200 focus:outline-none focus:ring-2 focus:ring-white/50 transition">
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer text-indigo-100 font-medium">
+                  <input type="checkbox" id="bypass-cache" class="rounded accent-indigo-400 w-4 h-4 cursor-pointer">
+                  <span>Bypass cache</span>
+                </label>
+                <select id="provider-select" class="bg-white/10 backdrop-blur-md border border-white/20 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer">
+                  <option value="" class="bg-[#171626] text-white">Auto (Failover Order)</option>
+                  <option value="groq" class="bg-[#171626] text-white">Force Groq First</option>
+                  <option value="gemini" class="bg-[#171626] text-white">Force Gemini First</option>
+                </select>
+              </div>
+              <button id="send-btn" onclick="sendPrompt()" class="px-6 py-2.5 rounded-xl bg-white text-[#4f46e5] font-extrabold text-xs shadow-md hover:bg-indigo-50 transition transform active:scale-95">
+                Send Request ➔
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Request Details & Response Inspector Card -->
+        <div class="purple-subcard rounded-2xl p-5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <span>Response & Inspection Details</span>
+            </h4>
+            <span id="inspect-tag" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400">Idle</span>
+          </div>
+
+          <div id="response-box" class="text-xs text-slate-300 min-h-[90px] font-mono bg-[#171626] p-4 rounded-xl border border-slate-800 whitespace-pre-wrap leading-relaxed">
+            Click any request from the left list or send a new prompt to inspect model response, provider headers, latency, and cost breakdown.
+          </div>
+
+          <!-- Detail Metrics Footer -->
+          <div class="grid grid-cols-3 gap-3 pt-1">
+            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
+              <div class="text-[10px] font-bold text-slate-400 uppercase">Provider / Route</div>
+              <div id="detail-provider" class="text-xs font-extrabold text-indigo-400 mt-0.5">-</div>
+            </div>
+            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
+              <div class="text-[10px] font-bold text-slate-400 uppercase">Latency</div>
+              <div id="detail-latency" class="text-xs font-extrabold text-emerald-400 mt-0.5">-</div>
+            </div>
+            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
+              <div class="text-[10px] font-bold text-slate-400 uppercase">Cost / Saved</div>
+              <div id="detail-cost" class="text-xs font-extrabold text-indigo-300 mt-0.5">-</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
 
 <script>
-const usd = n => '$' + (n || 0).toFixed(6);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const $ = id => document.getElementById(id);
+  let rawData = null;
+  let activeFilter = 'all';
 
-function badge(provider) {
-  return `<span class="badge b-${esc(provider)}">${esc(provider.toUpperCase())}</span>`;
-}
+  // --- Light / Dark Mode Toggle Logic ---
+  function applyTheme(theme) {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.getElementById('theme-icon').textContent = '☀️';
+      document.getElementById('theme-label').textContent = 'Light Mode';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.getElementById('theme-icon').textContent = '🌙';
+      document.getElementById('theme-label').textContent = 'Dark Mode';
+    }
+  }
 
-async function refresh() {
-  try {
-    const r = await fetch('/v1/chat/live');
-    const d = await r.json();
-    const c = d.cache;
-    $('c-req').textContent = c.requests;
-    $('c-split').textContent = `${c.hits} hits / ${c.misses} misses`;
-    $('c-rate').textContent = (c.hitRate * 100).toFixed(0) + '%';
-    $('c-entries').textContent = `${c.entries} entries cached`;
-    $('c-tok').textContent = c.tokensSaved.toLocaleString();
-    $('c-saved').textContent = usd(c.costSaved);
-    $('c-spent').textContent = usd(d.totals.spent);
-    $('c-fo').textContent = `${d.totals.failovers} failover${d.totals.failovers === 1 ? '' : 's'}`;
+  function toggleTheme() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const newTheme = isDark ? 'light' : 'dark';
+    localStorage.setItem('cortex-theme', newTheme);
+    applyTheme(newTheme);
+  }
 
-    const rows = d.recent.map(e => {
-      const t = new Date(e.time).toLocaleTimeString();
-      const fo = e.failedProviders && e.failedProviders.length ? `<span class="tag-fo">failover from ${esc(e.failedProviders.join(', '))}</span>` : '';
-      const sim = e.cache && e.similarity ? ` <span class="muted">(${e.similarity.toFixed(3)})</span>` : '';
-      const saved = e.cache ? `<span class="green">${usd(e.savedCost)}</span>` : '<span class="muted">-</span>';
-      return `<tr><td class="muted">${t}</td><td>${badge(e.provider)}${sim}${fo}</td><td>${esc(e.prompt)}</td><td>${e.latencyMs} ms</td><td>${usd(e.cost)}</td><td>${saved}</td></tr>`;
+  // Load saved theme or default to light
+  const savedTheme = localStorage.getItem('cortex-theme') || 'light';
+  applyTheme(savedTheme);
+
+  const fmtUsd = n => '$' + (n || 0).toFixed(6);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function scrollToTester() {
+    document.getElementById('tester-container').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('prompt-input').focus();
+  }
+
+  function filterLogs(filter) {
+    activeFilter = filter;
+    ['all', 'cache', 'failover'].forEach(f => {
+      const btn = document.getElementById(`tab-${f}`);
+      if (btn) {
+        if (f === filter) {
+          btn.className = 'px-4 py-2 rounded-xl bg-[#5b50e6] text-white text-xs font-bold shadow-md transition';
+        } else {
+          btn.className = 'px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition';
+        }
+      }
     });
-    $('rows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6" class="muted">No requests yet.</td></tr>';
-    $('status').textContent = 'live, updated ' + new Date().toLocaleTimeString();
-    $('status').className = '';
-  } catch (e) {
-    $('status').textContent = 'gateway unreachable';
-    $('status').className = 'bad';
+    if (rawData) renderLogs(rawData.recent);
   }
-}
 
-async function send() {
-  const text = $('prompt').value.trim();
-  if (!text) return;
-  $('send').disabled = true;
-  $('answer').className = 'muted';
-  $('answer').textContent = 'thinking...';
-  const headers = { 'Content-Type': 'application/json' };
-  if ($('bypass').checked) headers['x-cache'] = 'bypass';
-  const body = { messages: [{ role: 'user', content: text }] };
-  if ($('prov').value) body.provider = $('prov').value;
-  try {
-    const r = await fetch('/v1/chat/completions', { method: 'POST', headers, body: JSON.stringify(body) });
-    const d = await r.json();
-    if (d.error) throw new Error(d.error.message);
-    const via = d.provider === 'cache' ? `cache (similarity ${d.cache.similarity.toFixed(3)})` : d.provider;
-    $('answer').className = '';
-    $('answer').textContent = `[${via}] ` + (d.choices?.[0]?.message?.content ?? '');
-  } catch (e) {
-    $('answer').className = 'muted';
-    $('answer').textContent = 'Error: ' + e.message;
+  async function refreshData() {
+    try {
+      const res = await fetch('/v1/chat/live');
+      if (!res.ok) throw new Error('Gateway Offline');
+      const data = await res.json();
+      rawData = data;
+      const c = data.cache;
+
+      // Update Top Cards
+      document.getElementById('metric-requests').textContent = c.requests.toLocaleString();
+      document.getElementById('metric-split').textContent = `${c.hits} hits / ${c.misses} misses`;
+      
+      const totalReq = c.requests || 1;
+      const hitPct = Math.round((c.hits / totalReq) * 100);
+      document.getElementById('bar-hits').style.width = hitPct + '%';
+      document.getElementById('bar-misses').style.width = (100 - hitPct) + '%';
+
+      document.getElementById('metric-hitrate').textContent = (c.hitRate * 100).toFixed(1) + '%';
+      document.getElementById('metric-entries').textContent = `${c.entries} entries cached`;
+      document.getElementById('metric-threshold').textContent = c.threshold || '0.92';
+
+      document.getElementById('metric-saved').textContent = fmtUsd(c.costSaved);
+      document.getElementById('metric-tokens').textContent = `${c.tokensSaved.toLocaleString()} tokens avoided`;
+
+      document.getElementById('metric-spent').textContent = fmtUsd(data.totals.spent);
+      document.getElementById('metric-failovers').textContent = `${data.totals.failovers} failover${data.totals.failovers === 1 ? '' : 's'}`;
+
+      document.getElementById('status-text').textContent = 'Gateway Online';
+      document.getElementById('status-pill').className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold';
+
+      renderLogs(data.recent);
+    } catch (e) {
+      document.getElementById('status-text').textContent = 'Gateway Disconnected';
+      document.getElementById('status-pill').className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-semibold';
+    }
   }
-  $('send').disabled = false;
-  refresh();
-}
 
-$('send').addEventListener('click', send);
-$('prompt').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
-refresh();
-setInterval(refresh, 2000);
+  function renderLogs(recent) {
+    if (!recent || !recent.length) {
+      document.getElementById('log-list').innerHTML = `
+        <div class="p-4 rounded-2xl purple-subcard text-slate-400 text-xs text-center">
+          No requests logged yet.
+        </div>`;
+      document.getElementById('log-count').textContent = '0 items';
+      return;
+    }
+
+    let filtered = recent;
+    if (activeFilter === 'cache') {
+      filtered = recent.filter(r => r.cache || r.provider === 'cache');
+    } else if (activeFilter === 'failover') {
+      filtered = recent.filter(r => r.failedProviders && r.failedProviders.length > 0);
+    }
+
+    document.getElementById('log-count').textContent = `${filtered.length} items`;
+
+    const html = filtered.map((r, idx) => {
+      const isCache = r.cache || r.provider === 'cache';
+      const hasFailover = r.failedProviders && r.failedProviders.length > 0;
+      
+      let badgeBg = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
+      let provLabel = (r.provider || 'GROQ').toUpperCase();
+      if (isCache) {
+        badgeBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+        provLabel = 'CACHE HIT';
+      } else if (provLabel === 'GEMINI') {
+        badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+      }
+
+      const simText = isCache && r.similarity ? ` (${r.similarity.toFixed(3)})` : '';
+      const foTag = hasFailover ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold ml-1">FO</span>` : '';
+
+      return `
+        <div onclick="selectRequest(${idx})" class="p-3.5 rounded-xl purple-subcard hover:border-[#5b50e6] transition cursor-pointer flex items-center justify-between gap-3 group">
+          <div class="flex items-center gap-3 overflow-hidden">
+            <span class="text-xs px-2.5 py-1 rounded-lg border ${badgeBg} font-bold shrink-0">
+              ${provLabel}${simText}${foTag}
+            </span>
+            <span class="text-xs text-slate-200 font-medium truncate group-hover:text-indigo-200 transition">
+              ${esc(r.prompt || 'Chat Completion')}
+            </span>
+          </div>
+          <div class="text-right shrink-0 text-xs">
+            <div class="font-bold text-slate-200">${isCache ? fmtUsd(r.savedCost) : fmtUsd(r.cost)}</div>
+            <div class="text-[10px] text-slate-400 font-medium">${r.latencyMs || 0}ms</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('log-list').innerHTML = html;
+  }
+
+  function selectRequest(idx) {
+    if (!rawData || !rawData.recent || !rawData.recent[idx]) return;
+    const r = rawData.recent[idx];
+    const isCache = r.cache || r.provider === 'cache';
+    
+    document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${r.provider}`;
+    document.getElementById('inspect-tag').className = isCache 
+      ? 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+      : 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+
+    document.getElementById('response-box').textContent = 
+      `Prompt: "${r.prompt}"\n\n` +
+      `Provider: ${r.provider}\n` +
+      `Cache Hit: ${isCache ? 'YES' : 'NO'}\n` +
+      `Similarity Score: ${r.similarity ? r.similarity.toFixed(4) : 'N/A'}\n` +
+      `Tokens: ${r.tokens || r.savedTokens || 0}\n` +
+      `Latency: ${r.latencyMs} ms\n` +
+      `Failed Providers: ${r.failedProviders?.length ? r.failedProviders.join(', ') : 'None'}`;
+
+    document.getElementById('detail-provider').textContent = (r.provider || 'auto').toUpperCase();
+    document.getElementById('detail-latency').textContent = `${r.latencyMs || 0} ms`;
+    document.getElementById('detail-cost').textContent = isCache ? `Saved ${fmtUsd(r.savedCost)}` : fmtUsd(r.cost);
+  }
+
+  async function sendPrompt() {
+    const input = document.getElementById('prompt-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const btn = document.getElementById('send-btn');
+    const resBox = document.getElementById('response-box');
+    
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    resBox.textContent = 'Sending prompt through CortexGate Gateway...';
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (document.getElementById('bypass-cache').checked) {
+      headers['x-cache'] = 'bypass';
+    }
+
+    const providerVal = document.getElementById('provider-select').value;
+    const body = { messages: [{ role: 'user', content: text }] };
+    if (providerVal) body.provider = providerVal;
+
+    try {
+      const r = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+
+      if (data.error) throw new Error(data.error.message);
+
+      const isCache = data.provider === 'cache';
+      const answer = data.choices?.[0]?.message?.content || '';
+
+      document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${data.provider}`;
+      document.getElementById('inspect-tag').className = isCache 
+        ? 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+        : 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+
+      resBox.textContent = `[${isCache ? '⚡ CACHE HIT' : '🤖 PROVIDER: ' + data.provider.toUpperCase()}]\n\n${answer}`;
+      
+      document.getElementById('detail-provider').textContent = (data.provider || 'groq').toUpperCase();
+      document.getElementById('detail-latency').textContent = 'Completed';
+      document.getElementById('detail-cost').textContent = isCache ? `Saved $${data.cache?.saved_cost?.toFixed(5) || '0'}` : fmtUsd(data.cost);
+
+      input.value = '';
+    } catch (err) {
+      resBox.textContent = 'Error: ' + err.message;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Send Request ➔';
+    refreshData();
+  }
+
+  document.getElementById('prompt-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendPrompt();
+  });
+
+  refreshData();
+  setInterval(refreshData, 2000);
 </script>
 </body>
 </html>
