@@ -1,12 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import chatRouter from './routes/chat.js';
+import * as circuit from './gateway/circuitBreaker.js';
+import { watchEnv } from './gateway/envWatcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +26,9 @@ app.use('/v1/chat', chatRouter);
 app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
 });
+
+// Pick up .env edits (API keys, thresholds) without a restart.
+watchEnv(() => circuit.resetAll());
 
 app.listen(PORT, () => {
   console.log(`CortexGate Gateway listening on port ${PORT}`);

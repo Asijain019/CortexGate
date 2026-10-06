@@ -25,10 +25,13 @@ CortexGate addresses these by inserting a gateway between the application and th
 | OpenAI-compatible endpoint (`/v1/chat/completions`) | Implemented |
 | Provider adapters: Groq, Gemini | Implemented |
 | Automatic failover on 5xx, 429 and timeout | Implemented |
-| Semantic cache (embeddings + cosine similarity, in-memory) | Implemented |
+| Semantic cache (embeddings + cosine similarity, saved to disk) | Implemented |
+| Match verification (a model confirms borderline cache matches against the stored answer) | Implemented |
+| Circuit breaker (skips an unhealthy provider for a short time) | Implemented |
+| Live `.env` reload and persistent request history | Implemented |
 | Per-request cost calculation and savings tracking | Implemented |
 | Live dashboard (polling) with hit rate, tokens and cost saved, recent requests | Implemented |
-| MongoDB request logging with actual vs counterfactual cost | Planned (next) |
+| MongoDB request logging with actual vs counterfactual cost | Implemented |
 | Vector database for the cache (Qdrant / pgvector) | Planned |
 | Token-bucket rate limiting with priority queue (Redis, BullMQ) | Planned |
 | Model cascading with quality verification and escalation | Planned |
@@ -40,7 +43,7 @@ CortexGate addresses these by inserting a gateway between the application and th
 ```mermaid
 flowchart TD
     A[Client application] --> B[API Gateway<br/>POST /v1/chat/completions]
-    B --> C{Semantic cache<br/>similarity >= 0.92?}
+    B --> C{Semantic cache<br/>similar and confirmed?}
     C -- hit --> H[Return cached answer<br/>cost = 0]
     C -- miss --> D[Provider chain]
     D --> E[Groq]
@@ -54,7 +57,7 @@ flowchart TD
 ```
 
 1. The gateway embeds the prompt with the Gemini embedding API.
-2. It compares the embedding with cached prompts using cosine similarity. At or above the threshold (default 0.92), the stored answer is returned with no provider call and the avoided cost is recorded.
+2. It compares the embedding with cached prompts using cosine similarity. Matches at or above the trust level (0.985) are returned directly. Borderline matches (0.88 to 0.985) are first confirmed by a quick model check against the stored answer. A confirmed match is returned with no provider call and the avoided cost is recorded.
 3. On a miss, the request goes to the first provider in the chain. If that provider fails with a retryable error, the next provider is tried automatically.
 4. Successful answers are stored in the cache, and every request is written to the request log that feeds the dashboard.
 
@@ -84,8 +87,9 @@ CortexGate/
         ├── index.js                # Express app, /health, /dashboard
         ├── routes/chat.js          # completions route, cache + failover logic
         ├── providers/              # groq.js, gemini.js, index.js (provider chain)
-        ├── cache/                  # embedder.js, semanticCache.js
-        └── stats/requestLog.js     # in-memory request log
+        ├── gateway/                # dispatch.js (failover), circuitBreaker.js, envWatcher.js
+        ├── cache/                  # embedder.js, semanticCache.js, verifier.js
+        └── stats/                  # requestLog.js, persist.js (saved to data/)
 ```
 
 ## Getting started
@@ -128,7 +132,9 @@ The second response has `"provider": "cache"`, `"cost": 0`, and a `cache` block 
 |---|---|---|
 | POST | `/v1/chat/completions` | OpenAI-style chat completion through the gateway |
 | GET | `/v1/chat/stats` | Cache statistics: requests, hits, misses, hit rate, tokens and cost saved |
-| GET | `/v1/chat/live` | Statistics plus the most recent requests (used by the dashboard) |
+| GET | `/v1/chat/live` | Statistics, provider health and the most recent requests (used by the dashboard) |
+| GET | `/v1/chat/summary` | Aggregated request and cost statistics from MongoDB |
+| POST | `/v1/chat/reset` | Clears the cache and request history |
 | GET | `/dashboard` | Live dashboard page |
 | GET | `/health` | Health check |
 
@@ -151,12 +157,17 @@ Set in `services/gateway/.env` (see `.env.example`).
 | `GEMINI_API_KEY` | none | Gemini API key (also used for embeddings) |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini chat model |
 | `PROVIDER_ORDER` | `groq,gemini` | Failover order |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017/cortexgate` | MongoDB URI for persistent request summaries |
 | `EMBEDDING_PROVIDER` | `gemini` | `gemini`, or `mock` for offline tests |
 | `EMBEDDING_MODEL` | `gemini-embedding-001` | Embedding model |
 | `EMBEDDING_TASK_TYPE` | `SEMANTIC_SIMILARITY` | Embedding task type; the 0.92 threshold was measured with this setting |
-| `CACHE_THRESHOLD` | `0.92` | Minimum cosine similarity for a cache hit |
-| `CACHE_TTL_MS` | `3600000` | Cache entry lifetime (1 hour) |
+| `CACHE_THRESHOLD` | `0.88` | Minimum cosine similarity for a candidate match |
+| `CACHE_TRUST_ABOVE` | `0.985` | At or above this a match is served directly; below it a model check confirms it first |
+| `CACHE_VERIFY` | `true` | Set to `false` to turn off the confirmation step |
+| `CACHE_TTL_MS` | `86400000` | Cache entry lifetime (24 hours) |
 | `CACHE_MAX_ENTRIES` | `500` | Maximum cache entries (least-recently-used eviction) |
+| `BREAKER_THRESHOLD` | `3` | Consecutive failures before a provider is skipped |
+| `BREAKER_COOLDOWN_MS` | `20000` | How long an unhealthy provider is skipped |
 
 Never commit `.env`; it holds your API keys.
 
@@ -176,22 +187,24 @@ With default embeddings the two groups overlapped (best safe threshold 0.85 gave
 
 Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sample is small (16 pairs) and a larger set is planned.
 
+**Update:** borderline matches are now confirmed by a model check against the stored answer. In live tests this blocked wrong matches that embeddings alone accepted ("convert 10 miles to km" vs "convert 10 km to miles" at 0.981, "boiling point in fahrenheit" vs "in celsius" at 0.928) while confirming real paraphrases ("distance from Mumbai to Delhi" vs "Delhi to Mumbai" at 0.971).
+
 ## Known limitations
 
-- The cache and request log are in memory and reset on restart (MongoDB and a vector database are planned).
+- The semantic cache and dashboard history are saved to local JSON files (`services/gateway/data/`). MongoDB request logging is also implemented for cross-restart cost summaries; a vector database is still planned.
+- Time-sensitive prompts (today's date, current office holders) are not yet excluded from the cache.
+- A negated question ("is X not Y?") can match its positive form; a guard is planned.
+- The match check is a model's judgment and costs a few tokens per borderline match.
 - Only single-turn prompts are cached, since a multi-turn answer depends on earlier messages.
 - "Cost saved" is a counterfactual at list price; free-tier calls cost nothing in practice.
-- Gemini token accounting currently undercounts hidden reasoning tokens, so Gemini costs are understated until the adapter is fixed.
 
 ## Roadmap
 
-1. MongoDB request logging with actual vs counterfactual cost
-2. Fix Gemini token counting and pricing table
-3. Vector database (Qdrant / pgvector) for the cache
-4. Rate limiting and priority queueing (Redis, BullMQ)
-5. Model cascading with verification and escalation
-6. Free-tier-aware quota scheduler
-7. React + WebSocket dashboard with budgets and alerts
+1. Vector database (Qdrant / pgvector) for the cache
+2. Rate limiting and priority queueing (Redis, BullMQ)
+3. Model cascading with verification and escalation
+4. Free-tier-aware quota scheduler
+5. React + WebSocket dashboard with budgets and alerts
 
 ## Team
 

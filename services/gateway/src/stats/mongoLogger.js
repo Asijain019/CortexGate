@@ -39,7 +39,7 @@ export async function logRequestToMongo(entry) {
       cacheHit: Boolean(entry.cacheHit || entry.cache),
       similarity: typeof entry.similarity === 'number' ? entry.similarity : null,
       tokens: entry.tokens || entry.savedTokens || 0,
-      actualCost: entry.actualCost || entry.cost || 0,
+      actualCost: entry.actualCost ?? ((entry.cost || 0) + (entry.verifyCost || 0)),
       counterfactualCost: entry.counterfactualCost || (entry.cache ? entry.savedCost : entry.cost) || 0,
       savedCost: entry.savedCost || 0,
       latencyMs: entry.latencyMs || 0,
