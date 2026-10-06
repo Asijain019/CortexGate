@@ -4,7 +4,7 @@ import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
 import * as circuit from '../gateway/circuitBreaker.js';
 import { dispatch } from '../gateway/dispatch.js';
-import { clearMongoRequests, getMongoRecent, getMongoSummary } from '../stats/mongoLogger.js';
+import { clearMongoRequests, getMongoRecent, getMongoSummary, warnMongoUnavailable } from '../stats/mongoLogger.js';
 
 const router = Router();
 
@@ -116,7 +116,7 @@ router.get('/live', async (req, res) => {
     mongoAvailable = true;
     if (!requestLog.hasMongoWriteError()) historySource = 'mongodb';
   } catch (err) {
-    console.warn(`[MongoDB History Warning] ${err.message}`);
+    warnMongoUnavailable(err);
   }
   if (historySource !== 'mongodb') recent = requestLog.getLive().recent;
 

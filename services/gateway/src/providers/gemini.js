@@ -10,6 +10,8 @@ const PRICING = {
 };
 
 const DEFAULT_MODEL = 'gemini-3.8-flash';
+const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
+const DEFAULT_TIMEOUT_MS = 20_000;
 
 export function calculateCost(usage, model) {
   if (!usage) return 0;
@@ -81,67 +83,85 @@ export async function sendChatCompletion({ messages, model }, options = {}) {
     payload.systemInstruction = systemInstruction;
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
+  const configuredTimeout = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '', 10);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : DEFAULT_TIMEOUT_MS;
+  const signal = options.signal || AbortSignal.timeout(timeoutMs);
+  const fetcher = options.fetch || fetch;
+  const fallbackModel = (process.env.GEMINI_FALLBACK_MODEL || DEFAULT_FALLBACK_MODEL)
+    .replace(/^models\//, '');
+  const models = [selectedModel.replace(/^models\//, '')];
+  if (fallbackModel !== models[0]) models.push(fallbackModel);
 
-  let response;
-  try {
-    const signal = options.signal || AbortSignal.timeout(15000);
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload),
-      signal
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      const error = new Error('Gemini request timed out');
-      error.status = 504;
+  for (let i = 0; i < models.length; i++) {
+    const currentModel = `models/${models[i]}`;
+    let response;
+    try {
+      response = await fetcher(
+        `https://generativelanguage.googleapis.com/v1beta/${currentModel}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal
+        }
+      );
+    } catch (err) {
+      if (err.name === 'AbortError' || err.name === 'TimeoutError' || signal.aborted) {
+        const error = new Error('Gemini request timed out');
+        error.status = 504;
+        error.code = 'PROVIDER_TIMEOUT';
+        if (i > 0) error.transient = false;
+        throw error;
+      }
+      const error = new Error(`Gemini network error: ${err.message}`);
+      error.status = 500;
+      if (i > 0) error.transient = false;
       throw error;
     }
-    const error = new Error(`Gemini network error: ${err.message}`);
-    error.status = 500;
-    throw error;
-  }
 
-  if (!response.ok) {
-    let errorMsg = `Gemini API error (status ${response.status})`;
-    try {
-      const errorJson = await response.json();
-      if (errorJson.error?.message) {
-        errorMsg = errorJson.error.message;
+    if (!response.ok) {
+      let errorMsg = `Gemini API error (status ${response.status})`;
+      try {
+        const errorJson = await response.json();
+        if (errorJson.error?.message) errorMsg = errorJson.error.message;
+      } catch (_) {
+        // Ignore JSON parse error
       }
-    } catch (_) {
-      // Ignore JSON parse error
+      const error = new Error(errorMsg);
+      error.status = response.status;
+      if ((response.status === 429 || response.status === 503) && i < models.length - 1) {
+        console.warn(`[Gemini] Model '${models[i]}' returned status ${response.status}; trying fallback model '${models[i + 1]}'`);
+        continue;
+      }
+      if (i > 0) error.transient = false;
+      throw error;
     }
-    const error = new Error(errorMsg);
-    error.status = response.status;
-    throw error;
+
+    const data = await response.json();
+    const candidate = data.candidates && data.candidates[0];
+    const parts = candidate?.content?.parts || [];
+    const content = parts.map(p => p.text || '').join('');
+
+    const usageMeta = data.usageMetadata || {};
+    const total = usageMeta.totalTokenCount || 0;
+    const prompt = usageMeta.promptTokenCount || 0;
+    const candidates = usageMeta.candidatesTokenCount || 0;
+
+    const usage = {
+      prompt_tokens: prompt,
+      completion_tokens: total ? Math.max(0, total - prompt) : candidates,
+      total_tokens: total || prompt + candidates
+    };
+
+    return {
+      content,
+      usage,
+      provider: 'gemini',
+      model: data.modelVersion || models[i]
+    };
   }
 
-  const data = await response.json();
-  const candidate = data.candidates && data.candidates[0];
-  const parts = candidate?.content?.parts || [];
-  const content = parts.map(p => p.text || '').join('');
-
-  const usageMeta = data.usageMetadata || {};
-  const total = usageMeta.totalTokenCount || 0;
-  const prompt = usageMeta.promptTokenCount || 0;
-  const candidates = usageMeta.candidatesTokenCount || 0;
-
-  const usage = {
-    prompt_tokens: prompt,
-    completion_tokens: total ? Math.max(0, total - prompt) : candidates,
-    total_tokens: total || prompt + candidates
-  };
-
-  const cleanModelName = selectedModel.replace(/^models\//, '');
-
-  return {
-    content,
-    usage,
-    provider: 'gemini',
-    model: cleanModelName
-  };
+  throw new Error('Gemini request failed without an API response');
 }
