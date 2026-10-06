@@ -4,7 +4,7 @@ import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
 import * as circuit from '../gateway/circuitBreaker.js';
 import { dispatch } from '../gateway/dispatch.js';
-import { getMongoSummary } from '../stats/mongoLogger.js';
+import { clearMongoRequests, getMongoRecent, getMongoSummary } from '../stats/mongoLogger.js';
 
 const router = Router();
 
@@ -31,7 +31,7 @@ router.post('/completions', async (req, res) => {
     if (cacheCtx.hit) {
       const { entry, similarity, verified } = cacheCtx.hit;
       console.log(`[Gateway] CACHE HIT (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''}) - saved $${entry.cost.toFixed(6)}`);
-      requestLog.record({
+      await requestLog.record({
         provider: 'cache', cache: true, similarity, verified,
         cost: 0, verifyCost: cacheCtx.verifyCost, savedCost: entry.cost,
         savedTokens: entry.response.usage?.total_tokens || 0,
@@ -72,7 +72,7 @@ router.post('/completions', async (req, res) => {
     if (useCache) {
       semanticCache.store({ vector: cacheCtx.vector, key: cacheCtx.key, response: out.result, cost: out.cost, provider: out.provider });
     }
-    requestLog.record({
+    await requestLog.record({
       provider: out.provider, cache: false, cost: out.cost,
       tokens: out.result.usage?.total_tokens || 0, status: 'ok', ...common
     });
@@ -90,10 +90,13 @@ router.post('/completions', async (req, res) => {
   }
 
   const status = out.lastError?.status || 500;
-  requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', ...common });
+  await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', ...common });
+  const providerFailureSummary = out.providerErrors?.map(({ provider, message }) => `${provider}: ${message}`).join('; ');
   return res.status(status).json({
     error: {
-      message: out.lastError?.message || 'Failed to process chat completion request across all configured providers',
+      message: providerFailureSummary
+        ? `All configured providers failed. ${providerFailureSummary}`
+        : out.lastError?.message || 'Failed to process chat completion request across all configured providers',
       type: 'api_error',
       status
     }
@@ -104,20 +107,48 @@ router.get('/stats', (req, res) => {
   res.json(semanticCache.getStats());
 });
 
-router.get('/live', (req, res) => {
+router.get('/live', async (req, res) => {
+  let recent = requestLog.getLive().recent;
+  let historySource = 'local';
+  let mongoAvailable = false;
+  try {
+    recent = await getMongoRecent();
+    mongoAvailable = true;
+    if (!requestLog.hasMongoWriteError()) historySource = 'mongodb';
+  } catch (err) {
+    console.warn(`[MongoDB History Warning] ${err.message}`);
+  }
+  if (historySource !== 'mongodb') recent = requestLog.getLive().recent;
+
   res.json({
     cache: semanticCache.getStats(),
     ...requestLog.getLive(),
+    recent,
+    persistence: {
+      mongodb: !mongoAvailable ? 'unavailable' : historySource === 'mongodb' ? 'connected' : 'degraded',
+      historySource
+    },
     breakers: circuit.getStatus(Object.keys(providers))
   });
 });
 
-// Wipe cache + history (handy before a demo).
-router.post('/reset', (req, res) => {
+// Wipe cache + history (handy before a demo). Require MongoDB so reset does not
+// leave old persisted records visible in the dashboard.
+router.post('/reset', async (req, res) => {
+  let deletedCount;
+  try {
+    deletedCount = await clearMongoRequests();
+  } catch (err) {
+    return res.status(503).json({
+      ok: false,
+      error: `MongoDB is unavailable; demo data was not reset (${err.message})`
+    });
+  }
+
   semanticCache.clear();
   requestLog.clear();
   circuit.resetAll();
-  res.json({ ok: true });
+  res.json({ ok: true, deletedCount });
 });
 
 router.get('/summary', async (req, res) => {

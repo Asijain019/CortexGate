@@ -24,6 +24,7 @@ app.use('/v1/chat', chatRouter);
 
 // Live dashboard (polls /v1/chat/live)
 app.get('/dashboard', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
 });
 

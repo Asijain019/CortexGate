@@ -25,6 +25,7 @@ export async function sendChatCompletion({ messages, model }, options = {}) {
   if (!apiKey) {
     const error = new Error('GROQ_API_KEY is not configured');
     error.status = 500;
+    error.transient = false;
     throw error;
   }
 

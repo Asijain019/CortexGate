@@ -8,10 +8,11 @@ const saved = persist.load('requests', null);
 const recent = Array.isArray(saved?.recent) ? saved.recent : [];
 const totals = { requests: 0, spent: 0, failovers: 0, errors: 0, ...(saved?.totals || {}) };
 const byProvider = { ...(saved?.byProvider || {}) };
+let mongoWriteError = null;
 
 const persistNow = () => persist.save('requests', () => ({ recent, totals, byProvider }));
 
-export function record(entry) {
+export async function record(entry) {
   const row = { time: new Date().toISOString(), ...entry };
   recent.unshift(row);
   if (recent.length > MAX_ENTRIES) recent.pop();
@@ -23,17 +24,25 @@ export function record(entry) {
   byProvider[entry.provider] = (byProvider[entry.provider] || 0) + 1;
   persistNow();
 
-  // Persistent MongoDB logging (fire-and-forget, non-blocking)
-  logRequestToMongo(row);
+  // Local history updates immediately; Mongo persistence is awaited by the route
+  // so the dashboard can read the row back as soon as the request completes.
+  const result = await logRequestToMongo(row);
+  if (!result.persisted) mongoWriteError = result.error || 'MongoDB write failed';
+  return result;
 }
 
 export function getLive() {
   return { totals, byProvider, recent };
 }
 
+export function hasMongoWriteError() {
+  return Boolean(mongoWriteError);
+}
+
 export function clear() {
   recent.length = 0;
   Object.assign(totals, { requests: 0, spent: 0, failovers: 0, errors: 0 });
   for (const k of Object.keys(byProvider)) delete byProvider[k];
+  mongoWriteError = null;
   persistNow();
 }

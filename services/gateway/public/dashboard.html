@@ -92,7 +92,6 @@
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <span id="status-text">Gateway Online</span>
       </div>
-
       <!-- Theme Toggle Button -->
       <button id="theme-btn" onclick="toggleTheme()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition font-bold text-xs flex items-center gap-1.5" title="Toggle Light/Dark Mode">
         <span id="theme-icon">🌙</span>
@@ -100,6 +99,9 @@
 
       <button onclick="refreshData()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition" title="Refresh Now">
         🔄
+      </button>
+      <button onclick="resetDemoData()" class="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-xs font-bold transition" title="Clear MongoDB request history and reset demo cache">
+        Reset demo data
       </button>
     </div>
   </header>
@@ -403,7 +405,8 @@
 
     document.getElementById('log-count').textContent = `${filtered.length} items`;
 
-    const html = filtered.map((r, idx) => {
+    const html = filtered.map(r => {
+      const requestIndex = recent.indexOf(r);
       const isCache = r.cache || r.provider === 'cache';
       const hasFailover = r.failedProviders && r.failedProviders.length > 0;
       
@@ -418,9 +421,16 @@
 
       const simText = isCache && r.similarity ? ` (${r.similarity.toFixed(3)})` : '';
       const foTag = hasFailover ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold ml-1">FO</span>` : '';
+      const checkTag = r.verified === true
+        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold ml-1">CONFIRMED BY CHECK</span>'
+        : r.verification === 'rejected'
+          ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold ml-1">WRONG MATCH BLOCKED${typeof r.nearSimilarity === 'number' ? ` (${r.nearSimilarity.toFixed(3)})` : ''}</span>`
+          : r.verification === 'failed'
+            ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold ml-1">CHECK FAILED</span>'
+            : '';
 
       return `
-        <div onclick="selectRequest(${idx})" class="p-3.5 rounded-xl purple-subcard hover:border-[#5b50e6] transition cursor-pointer flex items-center justify-between gap-3 group">
+        <div onclick="selectRequest(${requestIndex})" class="p-3.5 rounded-xl purple-subcard hover:border-[#5b50e6] transition cursor-pointer flex items-center justify-between gap-3 group">
           <div class="flex items-center gap-3 overflow-hidden">
             <span class="text-xs px-2.5 py-1 rounded-lg border ${badgeBg} font-bold shrink-0">
               ${provLabel}${simText}${foTag}
@@ -428,6 +438,7 @@
             <span class="text-xs text-slate-200 font-medium truncate group-hover:text-indigo-200 transition">
               ${esc(r.prompt || 'Chat Completion')}
             </span>
+            ${checkTag}
           </div>
           <div class="text-right shrink-0 text-xs">
             <div class="font-bold text-slate-200">${isCache ? fmtUsd(r.savedCost) : fmtUsd(r.cost)}</div>
@@ -455,6 +466,7 @@
       `Provider: ${r.provider}\n` +
       `Cache Hit: ${isCache ? 'YES' : 'NO'}\n` +
       `Similarity Score: ${r.similarity ? r.similarity.toFixed(4) : 'N/A'}\n` +
+      `Cache Check: ${r.verified === true ? 'Confirmed by check' : r.verification === 'rejected' ? `Wrong match blocked (similarity ${Number(r.nearSimilarity || 0).toFixed(4)})` : r.verification === 'failed' ? 'Check failed; treated as a miss' : 'Not needed'}\n` +
       `Tokens: ${r.tokens || r.savedTokens || 0}\n` +
       `Latency: ${r.latencyMs} ms\n` +
       `Failed Providers: ${r.failedProviders?.length ? r.failedProviders.join(', ') : 'None'}`;
@@ -517,6 +529,20 @@
     btn.disabled = false;
     btn.textContent = 'Send Request ➔';
     refreshData();
+  }
+
+  async function resetDemoData() {
+    if (!window.confirm('Reset demo data? This deletes all request history in MongoDB and clears the cache and dashboard stats for this gateway.')) return;
+    try {
+      const res = await fetch('/v1/chat/reset', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Reset failed');
+      document.getElementById('response-box').textContent = `Demo data reset. Removed ${data.deletedCount} MongoDB request records.`;
+      document.getElementById('inspect-tag').textContent = 'Reset complete';
+      refreshData();
+    } catch (err) {
+      document.getElementById('response-box').textContent = 'Reset failed: ' + err.message;
+    }
   }
 
   document.getElementById('prompt-input').addEventListener('keydown', e => {
