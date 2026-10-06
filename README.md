@@ -31,7 +31,7 @@ CortexGate addresses these by inserting a gateway between the application and th
 | Live `.env` reload and persistent request history | Implemented |
 | Per-request cost calculation and savings tracking | Implemented |
 | Live dashboard (polling) with hit rate, tokens and cost saved, recent requests | Implemented |
-| MongoDB request logging with actual vs counterfactual cost | Planned (next) |
+| MongoDB request logging with actual vs counterfactual cost | Implemented |
 | Vector database for the cache (Qdrant / pgvector) | Planned |
 | Token-bucket rate limiting with priority queue (Redis, BullMQ) | Planned |
 | Model cascading with quality verification and escalation | Planned |
@@ -133,6 +133,7 @@ The second response has `"provider": "cache"`, `"cost": 0`, and a `cache` block 
 | POST | `/v1/chat/completions` | OpenAI-style chat completion through the gateway |
 | GET | `/v1/chat/stats` | Cache statistics: requests, hits, misses, hit rate, tokens and cost saved |
 | GET | `/v1/chat/live` | Statistics, provider health and the most recent requests (used by the dashboard) |
+| GET | `/v1/chat/summary` | Aggregated request and cost statistics from MongoDB |
 | POST | `/v1/chat/reset` | Clears the cache and request history |
 | GET | `/dashboard` | Live dashboard page |
 | GET | `/health` | Health check |
@@ -156,6 +157,7 @@ Set in `services/gateway/.env` (see `.env.example`).
 | `GEMINI_API_KEY` | none | Gemini API key (also used for embeddings) |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini chat model |
 | `PROVIDER_ORDER` | `groq,gemini` | Failover order |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017/cortexgate` | MongoDB URI for persistent request summaries |
 | `EMBEDDING_PROVIDER` | `gemini` | `gemini`, or `mock` for offline tests |
 | `EMBEDDING_MODEL` | `gemini-embedding-001` | Embedding model |
 | `EMBEDDING_TASK_TYPE` | `SEMANTIC_SIMILARITY` | Embedding task type; the 0.92 threshold was measured with this setting |
@@ -189,23 +191,20 @@ Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sa
 
 ## Known limitations
 
-- The cache and request history are saved to local JSON files (`services/gateway/data/`), not a database; MongoDB and a vector database are planned.
+- The semantic cache and dashboard history are saved to local JSON files (`services/gateway/data/`). MongoDB request logging is also implemented for cross-restart cost summaries; a vector database is still planned.
 - Time-sensitive prompts (today's date, current office holders) are not yet excluded from the cache.
 - A negated question ("is X not Y?") can match its positive form; a guard is planned.
 - The match check is a model's judgment and costs a few tokens per borderline match.
 - Only single-turn prompts are cached, since a multi-turn answer depends on earlier messages.
 - "Cost saved" is a counterfactual at list price; free-tier calls cost nothing in practice.
-- Gemini token accounting currently undercounts hidden reasoning tokens, so Gemini costs are understated until the adapter is fixed.
 
 ## Roadmap
 
-1. MongoDB request logging with actual vs counterfactual cost
-2. Fix Gemini token counting and pricing table
-3. Vector database (Qdrant / pgvector) for the cache
-4. Rate limiting and priority queueing (Redis, BullMQ)
-5. Model cascading with verification and escalation
-6. Free-tier-aware quota scheduler
-7. React + WebSocket dashboard with budgets and alerts
+1. Vector database (Qdrant / pgvector) for the cache
+2. Rate limiting and priority queueing (Redis, BullMQ)
+3. Model cascading with verification and escalation
+4. Free-tier-aware quota scheduler
+5. React + WebSocket dashboard with budgets and alerts
 
 ## Team
 
