@@ -22,3 +22,4 @@ For project documentation, see [README.md](README.md).
 
 - Oct 2 - Cache match verification (blocks wrong hits like animal vs bird), disk persistence for cache and history, live .env reload, circuit breaker, dashboard health strip and reset
 - Oct 6 - Cache matches between 0.88 and 0.985 are confirmed by a model check against the stored answer. Live results: blocked wrong matches (10 miles to km vs km to miles 0.981, celsius vs fahrenheit 0.928, tallest vs second tallest mountain 0.930) and confirmed real paraphrases (Delhi/Mumbai distance 0.971)
+- Oct 6 - README updated: features, API, configuration, limitations and project structure now match the code
