@@ -270,7 +270,7 @@
     <!-- Card 3: Tokens & Cost Saved -->
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cost Saved</span>
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Estimated Cost Avoided</span>
         <span class="metric-icon metric-icon-saved w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">💰</span>
       </div>
       <div>
@@ -278,14 +278,15 @@
         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
           <span id="metric-tokens" class="font-semibold text-emerald-700 dark:text-emerald-400">0 tokens avoided</span>
         </div>
+        <div id="metric-net-saved" class="mt-1 text-xs font-medium text-[var(--text-muted)]">After verification: $0.00</div>
       </div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">Counterfactual List Price</div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">Gross list-price estimate; net excludes embedding cost</div>
     </div>
 
     <!-- Card 4: Total Spend & Failovers -->
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Actual Spend</span>
+        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Estimated API Cost</span>
         <span class="metric-icon metric-icon-spend w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">🛡️</span>
       </div>
       <div>
@@ -294,7 +295,7 @@
           <span id="metric-failovers" class="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">0 failovers</span>
         </div>
       </div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">Active Providers: Groq & Gemini</div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">List-price estimate; embeddings excluded</div>
     </div>
 
   </div>
@@ -480,6 +481,7 @@
 
       document.getElementById('metric-saved').textContent = fmtUsd(c.costSaved);
       document.getElementById('metric-tokens').textContent = `${c.tokensSaved.toLocaleString()} tokens avoided`;
+      document.getElementById('metric-net-saved').textContent = `After verification: ${fmtUsd(c.netCostSaved)}`;
 
       document.getElementById('metric-spent').textContent = fmtUsd(data.totals.spent);
       document.getElementById('metric-failovers').textContent = `${data.totals.failovers} failover${data.totals.failovers === 1 ? '' : 's'}`;

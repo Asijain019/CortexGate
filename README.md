@@ -31,7 +31,7 @@ CortexGate addresses these by inserting a gateway between the application and th
 | Live `.env` reload and persistent request history | Implemented |
 | Per-request cost calculation and savings tracking | Implemented |
 | Live dashboard (polling) with hit rate, tokens and cost saved, recent requests | Implemented |
-| MongoDB request logging with actual vs counterfactual cost | Implemented |
+| MongoDB request logging with estimated vs counterfactual list-price cost | Implemented |
 | Vector database for the cache (Qdrant / pgvector) | Planned |
 | Token-bucket rate limiting with priority queue (Redis, BullMQ) | Planned |
 | Model cascading with quality verification and escalation | Planned |
@@ -159,7 +159,7 @@ npm test
 - `x-cache: bypass` skips the cache for this request.
 - `x-provider: groq | gemini` (or `"provider"` in the body) tries that provider first; the others remain as failover.
 
-**Response additions.** On top of the standard OpenAI fields, responses include `provider` (`groq`, `gemini` or `cache`), `cost` (USD) and a `cache` object.
+**Response additions.** On top of the standard OpenAI fields, responses include `provider` (`groq`, `gemini` or `cache`), `cost` (estimated USD at configured list prices, not a provider invoice amount) and a `cache` object.
 
 ## Configuration
 
@@ -191,6 +191,8 @@ MongoDB is optional for gateway operation: request history is also saved locally
 
 Provider failover uses the configured `PROVIDER_ORDER`. If a provider rejects a request or model, the next provider is tried using its configured model (`GROQ_MODEL` or `GEMINI_MODEL`) rather than reusing a provider-specific model name. Gemini tries `GEMINI_FALLBACK_MODEL` once when its selected chat model responds with 429 or 503; if both Gemini models fail, the error is returned without repeating the same rate-limited request. MongoDB logging runs asynchronously and does not delay a completion or failover.
 
+**Understanding dashboard costs.** “Estimated API Cost” is a token-based list-price estimate for successful chat completions plus cache-verification model calls; it is not the amount charged by Groq or Google. Provider free tiers/credits may make the real bill zero, and CortexGate does not read billing or quota data from either provider. Gemini embedding calls used to check the cache are currently not included, so the estimate understates total API usage when embeddings are metered. “Estimated Cost Avoided” is the gross list-price value of cached completions that were skipped. “After verification” subtracts model-check cost from that gross value, but still excludes embedding cost; therefore it is not a complete net savings or billing figure. A borderline cache check can cost more than a very short completion because it sends the stored answer and both questions to a model.
+
 Never commit `.env`; it holds your API keys.
 
 ## Evaluation: choosing the cache threshold
@@ -218,7 +220,7 @@ Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sa
 - A negated question ("is X not Y?") can match its positive form; a guard is planned.
 - The match check is a model's judgment and costs a few tokens per borderline match.
 - Only single-turn prompts are cached, since a multi-turn answer depends on earlier messages.
-- "Cost saved" is a counterfactual at list price; free-tier calls cost nothing in practice.
+- Dashboard costs are list-price estimates, not provider billing data. Free-tier use may be uncharged; cache embeddings are not currently included in estimates.
 
 ## Roadmap
 
