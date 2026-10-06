@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { embed } from './embedder.js';
-import { areSameQuestion } from './verifier.js';
+import { checkCachedAnswer } from './verifier.js';
 import * as persist from '../stats/persist.js';
 
 // In-memory store, saved to disk (data/cache.json) so it survives restarts.
@@ -19,7 +19,7 @@ const stats = {
   verifyCost: 0      // USD spent on those checks
 };
 
-const threshold = () => parseFloat(process.env.CACHE_THRESHOLD || '0.92');
+const threshold = () => parseFloat(process.env.CACHE_THRESHOLD || '0.88');
 const trustAbove = () => parseFloat(process.env.CACHE_TRUST_ABOVE || '0.985');
 const verifyOn = () => (process.env.CACHE_VERIFY || 'true').toLowerCase() !== 'false';
 const ttlMs = () => parseInt(process.env.CACHE_TTL_MS || String(24 * 60 * 60 * 1000), 10);
@@ -122,7 +122,7 @@ export async function lookup(messages) {
   if (!verifyOn() || bestScore >= trustAbove()) return registerHit(false, 0);
 
   console.log(`[Cache] Borderline match (${bestScore.toFixed(3)}), verifying...`);
-  const v = await areSameQuestion(best.prompt, text);
+  const v = await checkCachedAnswer({ storedQuestion: best.prompt, storedAnswer: best.response.content, newQuestion: text });
   stats.verifications++;
   stats.verifyCost += v.cost || 0;
 
