@@ -24,6 +24,114 @@
     --text-muted: #94a3b8;
   }
 
+  .status-pill {
+    border: 1px solid;
+  }
+  .status-pill.status-online {
+    background-color: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+  }
+  .status-pill.status-offline {
+    background-color: #fee2e2;
+    border-color: #fca5a5;
+    color: #991b1b;
+  }
+  .status-indicator.status-online-dot {
+    background-color: #16a34a;
+  }
+  .status-indicator.status-offline-dot {
+    background-color: #dc2626;
+  }
+  .reset-button {
+    background-color: #b91c1c;
+    border: 1px solid #991b1b;
+    color: #ffffff;
+  }
+  .reset-button:hover {
+    background-color: #991b1b;
+  }
+
+  .live-stats-badge {
+    background-color: #e0e7ff;
+    border: 1px solid #c7d2fe;
+    color: #4338ca;
+  }
+  .metric-icon {
+    border: 1px solid transparent;
+  }
+  .metric-icon-requests {
+    background-color: #e0e7ff;
+    border-color: #c7d2fe;
+    color: #4338ca;
+  }
+  .metric-icon-cache {
+    background-color: #ede9fe;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+  }
+  .metric-icon-saved {
+    background-color: #d1fae5;
+    border-color: #a7f3d0;
+    color: #047857;
+  }
+  .metric-icon-spend {
+    background-color: #fef3c7;
+    border-color: #fde68a;
+    color: #b45309;
+  }
+
+  .dark .status-pill.status-online {
+    background-color: #052e16;
+    border-color: #166534;
+    color: #86efac;
+  }
+  .dark .status-pill.status-offline {
+    background-color: #450a0a;
+    border-color: #991b1b;
+    color: #fecaca;
+  }
+  .dark .status-indicator.status-online-dot {
+    background-color: #34d399;
+  }
+  .dark .status-indicator.status-offline-dot {
+    background-color: #f87171;
+  }
+  .dark .reset-button {
+    background-color: #7f1d1d;
+    border-color: #b91c1c;
+    color: #fee2e2;
+  }
+  .dark .reset-button:hover {
+    background-color: #991b1b;
+    color: #ffffff;
+  }
+  .dark .live-stats-badge {
+    background-color: #312e81;
+    border-color: #4338ca;
+    color: #c7d2fe;
+  }
+  .dark .metric-icon-requests {
+    background-color: #312e81;
+    border-color: #4338ca;
+    color: #c7d2fe;
+  }
+  .dark .metric-icon-cache {
+    background-color: #4c1d95;
+    border-color: #6d28d9;
+    color: #ddd6fe;
+  }
+  .dark .metric-icon-saved {
+    background-color: #064e3b;
+    border-color: #047857;
+    color: #a7f3d0;
+  }
+  .dark .metric-icon-spend {
+    background-color: #78350f;
+    border-color: #b45309;
+    color: #fde68a;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     background-color: var(--bg-main);
@@ -88,8 +196,8 @@
 
     <!-- Controls / System Status / Light & Dark Mode Toggle -->
     <div class="flex items-center gap-3">
-      <div id="status-pill" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <div id="status-pill" class="status-pill status-online flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold">
+        <span id="status-indicator" class="status-indicator status-online-dot w-2 h-2 rounded-full animate-pulse"></span>
         <span id="status-text">Gateway Online</span>
       </div>
       <!-- Theme Toggle Button -->
@@ -100,7 +208,7 @@
       <button onclick="refreshData()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition" title="Refresh Now">
         🔄
       </button>
-      <button onclick="resetDemoData()" class="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-xs font-bold transition" title="Clear MongoDB request history and reset demo cache">
+      <button onclick="resetDemoData()" class="reset-button px-3 py-2 rounded-xl text-xs font-bold transition" title="Clear MongoDB request history and reset demo cache">
         Reset demo data
       </button>
     </div>
@@ -111,7 +219,7 @@
     <div>
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">Gateway Dashboard</h2>
-        <span id="live-badge" class="text-xs px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-bold">Live Stats</span>
+        <span id="live-badge" class="live-stats-badge text-xs px-2.5 py-1 rounded-full font-bold">Live Stats</span>
       </div>
       <p class="text-xs text-[var(--text-muted)] mt-1">Manage and track prompt cache hits, cost savings, and provider failovers in real time.</p>
     </div>
@@ -129,7 +237,7 @@
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
         <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total Requests</span>
-        <span class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">📊</span>
+        <span class="metric-icon metric-icon-requests w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">📊</span>
       </div>
       <div>
         <div id="metric-requests" class="text-3xl font-extrabold text-[var(--text-primary)]">0</div>
@@ -148,7 +256,7 @@
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
         <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cache Hit Rate</span>
-        <span class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-sm">⚡</span>
+        <span class="metric-icon metric-icon-cache w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">⚡</span>
       </div>
       <div>
         <div id="metric-hitrate" class="text-3xl font-extrabold text-[#5b50e6]">0%</div>
@@ -163,7 +271,7 @@
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
         <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cost Saved</span>
-        <span class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">💰</span>
+        <span class="metric-icon metric-icon-saved w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">💰</span>
       </div>
       <div>
         <div id="metric-saved" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">$0.00</div>
@@ -178,7 +286,7 @@
     <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
       <div class="flex items-center justify-between">
         <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Actual Spend</span>
-        <span class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm">🛡️</span>
+        <span class="metric-icon metric-icon-spend w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">🛡️</span>
       </div>
       <div>
         <div id="metric-spent" class="text-3xl font-extrabold text-[var(--text-primary)]">$0.00</div>
@@ -377,12 +485,14 @@
       document.getElementById('metric-failovers').textContent = `${data.totals.failovers} failover${data.totals.failovers === 1 ? '' : 's'}`;
 
       document.getElementById('status-text').textContent = 'Gateway Online';
-      document.getElementById('status-pill').className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold';
+      document.getElementById('status-pill').className = 'status-pill status-online flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold';
+      document.getElementById('status-indicator').className = 'status-indicator status-online-dot w-2 h-2 rounded-full animate-pulse';
 
       renderLogs(data.recent);
     } catch (e) {
       document.getElementById('status-text').textContent = 'Gateway Disconnected';
-      document.getElementById('status-pill').className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-semibold';
+      document.getElementById('status-pill').className = 'status-pill status-offline flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold';
+      document.getElementById('status-indicator').className = 'status-indicator status-offline-dot w-2 h-2 rounded-full';
     }
   }
 
