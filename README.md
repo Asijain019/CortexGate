@@ -4,7 +4,7 @@
 
 CortexGate is a self-hosted gateway that sits between an application and multiple Large Language Model (LLM) providers. The application talks to one OpenAI-compatible endpoint, and CortexGate applies a control plane to every request: semantic caching, provider failover, and cost tracking.
 
-> **Status: mid-term prototype.** The core request path (gateway, two providers, failover, semantic cache, live dashboard) works end to end. Features marked *Planned* below are part of the project design but not yet built. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the day-by-day record.
+> **Status: mid-term prototype (updated Oct 6, 2026).** The gateway, Groq-to-Gemini failover, semantic cache, request history, and live dashboard are implemented. Gemini retries an overloaded/rate-limited chat model once using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are not yet built. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record.
 
 *Major Project (PR1107), Institute of Engineering and Technology (IET), JK Lakshmipat University.*
 
@@ -48,6 +48,8 @@ flowchart TD
     C -- miss --> D[Provider chain]
     D --> E[Groq]
     E -- error / 429 / timeout --> F[Gemini]
+    F -- model busy / rate limited --> F2[Gemini fallback model]
+    F2 --> G[Store answer in cache]
     E -- success --> G[Store answer in cache]
     F --> G
     G --> I[Response to client]
@@ -68,7 +70,8 @@ flowchart TD
 - **Embeddings:** Gemini embedding API (`gemini-embedding-001`, task type `SEMANTIC_SIMILARITY`)
 - **Cache store:** in-memory vector list (Qdrant / pgvector planned)
 - **Dashboard:** plain HTML + JavaScript, polling
-- **Planned:** MongoDB, Redis, BullMQ, React
+- **Persistence:** local JSON history and optional MongoDB request logging
+- **Planned:** Redis, BullMQ, Qdrant/pgvector, React + WebSocket dashboard
 
 ## Project structure
 
@@ -79,6 +82,7 @@ CortexGate/
 └── services/gateway/
     ├── package.json
     ├── .env.example
+    ├── test/                       # provider failover and Gemini fallback tests
     ├── public/
     │   └── dashboard.html          # live dashboard
     ├── scripts/
@@ -91,6 +95,8 @@ CortexGate/
         ├── cache/                  # embedder.js, semanticCache.js, verifier.js
         └── stats/                  # requestLog.js, persist.js (saved to data/)
 ```
+
+**Main files:** `src/index.js` starts the gateway; `src/routes/chat.js` handles chat requests and cache integration; `src/gateway/dispatch.js` applies provider ordering, retries, and failover; `src/providers/groq.js` and `src/providers/gemini.js` call provider APIs; `src/cache/semanticCache.js` and `src/cache/embedder.js` implement semantic caching; `src/stats/requestLog.js` and `src/stats/mongoLogger.js` record request history. `test/dispatch.test.js` and `test/gemini.test.js` cover failover behavior.
 
 ## Getting started
 
@@ -126,6 +132,16 @@ curl -s localhost:3000/v1/chat/completions -H "Content-Type: application/json" \
 
 The second response has `"provider": "cache"`, `"cost": 0`, and a `cache` block with the similarity score and the cost and tokens saved.
 
+### Test provider failover
+
+To demo Gemini fallback, leave `GEMINI_API_KEY` configured, comment out or remove `GROQ_API_KEY` in `services/gateway/.env`, then submit a new prompt. The gateway watches `.env` and reloads key changes without a restart. Send `x-cache: bypass` (or use the dashboard's cache-bypass option) to ensure the query reaches a provider. The response should report `"provider": "gemini"`; if Gemini's configured model is overloaded or rate limited, it retries with `GEMINI_FALLBACK_MODEL`. The live dashboard's failover log shows which provider failed.
+
+Run the offline provider tests with:
+
+```bash
+npm test
+```
+
 ## API
 
 | Method | Path | Description |
@@ -156,6 +172,8 @@ Set in `services/gateway/.env` (see `.env.example`).
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model |
 | `GEMINI_API_KEY` | none | Gemini API key (also used for embeddings) |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini chat model |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash` | One alternate chat model to try if the configured Gemini model returns 429 or 503 |
+| `GEMINI_TIMEOUT_MS` | `20000` | Gemini request timeout in milliseconds; a timed-out request immediately moves to the next provider |
 | `PROVIDER_ORDER` | `groq,gemini` | Failover order |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017/cortexgate` | MongoDB URI for persistent request summaries |
 | `EMBEDDING_PROVIDER` | `gemini` | `gemini`, or `mock` for offline tests |
@@ -168,6 +186,10 @@ Set in `services/gateway/.env` (see `.env.example`).
 | `CACHE_MAX_ENTRIES` | `500` | Maximum cache entries (least-recently-used eviction) |
 | `BREAKER_THRESHOLD` | `3` | Consecutive failures before a provider is skipped |
 | `BREAKER_COOLDOWN_MS` | `20000` | How long an unhealthy provider is skipped |
+
+MongoDB is optional for gateway operation: request history is also saved locally under `services/gateway/data/`. If MongoDB is not running at the configured URI, the dashboard uses local history and MongoDB-backed summaries are unavailable. Start MongoDB or set `MONGODB_URI` to a reachable MongoDB instance to enable those summaries. The database name in `MONGODB_URI` is honored; for example, `mongodb://127.0.0.1:27017/cortexgate` connects to the `cortexgate` database.
+
+Provider failover uses the configured `PROVIDER_ORDER`. If a provider rejects a request or model, the next provider is tried using its configured model (`GROQ_MODEL` or `GEMINI_MODEL`) rather than reusing a provider-specific model name. Gemini tries `GEMINI_FALLBACK_MODEL` once when its selected chat model responds with 429 or 503; if both Gemini models fail, the error is returned without repeating the same rate-limited request. MongoDB logging runs asynchronously and does not delay a completion or failover.
 
 Never commit `.env`; it holds your API keys.
 

@@ -1,28 +1,37 @@
 # Progress Log
 
-Chronological record of what has been built. One line per change, newest at the bottom.
-For project documentation, see [README.md](README.md).
+Chronological record of project changes, oldest first. For current behavior and setup, see [README.md](README.md).
 
-- Sep 30 - Gateway skeleton + Groq adapter working, /v1/chat/completions returns OpenAI-compatible responses
-- Sep 30 - Fixed Groq model config — account has a non-standard model catalog, gpt-oss-20b now in use, cost tracking verified against a live request.
-- Sep 30 - Gemini provider adapter added, chat route updated to be provider-agnostic
-- Sep 30 - Failover logic added to chat route with automatic retry on 5xx/429/timeout and provider logging
-- Oct 1 - Updated default Gemini model to gemini-3.8-flash (gemini-1.5-flash and 2.5-flash return 404 on new keys)
-- Oct 1 - Embedding module added for semantic cache (Gemini embedding API, optional SEMANTIC_SIMILARITY task type, offline mock embedder for tests)
-- Oct 1 - In-memory semantic cache added: cosine similarity, TTL, LRU eviction, per-system-prompt namespaces, savings stats
-- Oct 1 - In-memory request log added (provider, cache hit/miss, latency, cost, failovers) to feed the dashboard
-- Oct 1 - Polling dashboard added: hit rate, tokens and cost saved, spend, failover tags, recent requests, built-in prompt tester
-- Oct 1 - Gateway checks semantic cache before provider dispatch (hits return provider 'cache' at zero cost), logs every request, exposes GET /v1/chat/stats and /v1/chat/live, serves /dashboard. Verified live: paraphrase served from cache at similarity 0.992, different question correctly missed
-- Oct 1 - Threshold tuning script added: measures paraphrase hit rate vs wrong-hit rate across similarity thresholds
-- Oct 1 - Cache settings documented in .env.example (embedding model, task type, threshold 0.92)
-- Oct 1 - Threshold tuning on 16 pairs (8 paraphrase, 8 different): default embeddings overlapped (tau=0.85 gave 25% hits), SEMANTIC_SIMILARITY task type gave 100% paraphrase hits with 0 wrong hits at tau=0.92
-- Oct 1 - Verified both providers live with real keys (Groq gpt-oss-20b, Gemini 3.8 flash); cost tracking confirmed on real requests
-- Oct 1 - Known issues: Gemini usage undercounts thinking tokens (cost understated) and gemini-3.8-flash is missing from the pricing table; fix pending in providers/gemini.js
-- Oct 1 - Cache verified end to end with live embeddings: paraphrase hit at similarity 0.992 (saved 119 tokens), 'capital of Italy' correctly missed
+## Sep 30
 
-- Oct 2 - Cache match verification (blocks wrong hits like animal vs bird), disk persistence for cache and history, live .env reload, circuit breaker, dashboard health strip and reset
-- Oct 6 - Cache matches between 0.88 and 0.985 are confirmed by a model check against the stored answer. Live results: blocked wrong matches (10 miles to km vs km to miles 0.981, celsius vs fahrenheit 0.928, tallest vs second tallest mountain 0.930) and confirmed real paraphrases (Delhi/Mumbai distance 0.971)
-- Oct 6 - README updated: features, API, configuration, limitations and project structure now match the code
-- Oct 6 - Live test results: 15+27 vs 15+72, Hamlet vs Macbeth, India vs China population, celsius vs fahrenheit and km vs miles all handled correctly; Delhi/Mumbai distance paraphrase hit (0.971). Known risks: negated questions (python) and time-sensitive prompts (today's date, current PM) can be served from cache
-- Oct 2 - Fixed gemini.js: default model set to gemini-3.8-flash, added pricing entry, and corrected token calculation to account for hidden thinking tokens.
-- Oct 2 - Added MongoDB request logger (mongoLogger.js) with non-blocking fire-and-forget logging and GET /v1/chat/summary aggregation endpoint.
+- Gateway skeleton and Groq adapter; `/v1/chat/completions` returns OpenAI-compatible responses.
+- Fixed Groq model configuration for the account's non-standard model catalog; verified cost tracking.
+- Added the Gemini provider adapter and made the chat route provider-agnostic.
+- Added provider-chain failover for 5xx, 429, and timeout errors, with provider request logging.
+
+## Oct 1
+
+- Set Gemini's default chat model to `gemini-3.8-flash` after the then-tested account returned 404 for older model names.
+- Added Gemini embeddings, optional `SEMANTIC_SIMILARITY` task type, and an offline mock embedder.
+- Added semantic caching with cosine similarity, TTL, LRU eviction, system-prompt namespaces, and savings statistics.
+- Added an in-memory request log and polling dashboard for cache rate, token/cost savings, provider failovers, and recent requests.
+- Integrated cache lookup, response caching, request logging, `/v1/chat/stats`, `/v1/chat/live`, and `/dashboard`.
+- Added the threshold-tuning script and documented cache configuration. Measured 100% paraphrase hits and 0 wrong hits at threshold 0.92 using `SEMANTIC_SIMILARITY`.
+- Verified Groq and Gemini requests, cache hits, and cost tracking with live provider keys.
+- Recorded known cache limitations: negated and time-sensitive prompts may be incorrectly served from cache.
+
+## Oct 2
+
+- Added cache-match verification for borderline semantic matches, disk persistence for cache/history, live `.env` reload, circuit breaking, and dashboard health/reset controls.
+- Fixed Gemini token accounting for thinking tokens and added the Gemini 3.8 Flash pricing entry.
+- Added MongoDB request logging and the `/v1/chat/summary` aggregation endpoint.
+
+## Oct 6
+
+- Tested semantic verification against similar-but-different prompts; incorrect matches were rejected and paraphrases were confirmed.
+- Updated README documentation for the implemented API, configuration, limitations, and project layout.
+- Persisted dashboard request history and hardened provider failure retries.
+- Updated dashboard theme contrast on `main` (upstream commit `6a904cf`).
+- Confirmed the configured Gemini API key is accepted and `gemini-3.8-flash` is available. A live chat request to it returned 503 due to high demand, while `gemini-3.5-flash` completed successfully.
+- Added a one-time Gemini fallback-model attempt for 429/503 responses, configurable with `GEMINI_FALLBACK_MODEL`; stopped passing Groq-only model names when Groq's circuit is open and made 504 provider timeouts fail over without same-provider retries.
+- Documented the main gateway files, current provider fallback behavior, and how to demo Groq-to-Gemini failover; added `npm test`.

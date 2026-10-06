@@ -10,6 +10,7 @@ export function isRetryableError(error) {
   if (!status) return true;                          // network error, timeout
   if (status === 408) return true;                   // request timeout
   if (status === 429) return true;                   // rate limit
+  if (status === 400 || status === 404) return true; // provider-specific request/model rejection
   if (status === 401 || status === 403) return true; // bad or missing key: try the next provider
   if (status >= 500 && status < 600) return true;    // provider server error
   return false;
@@ -17,6 +18,7 @@ export function isRetryableError(error) {
 
 function isTransientProviderError(error) {
   if (!error || error.transient === false) return false;
+  if (error.code === 'PROVIDER_TIMEOUT' || error.status === 504) return false;
   const status = error.status;
   return !status || status === 408 || status === 429 || (status >= 500 && status < 600);
 }
@@ -47,7 +49,9 @@ export async function dispatch({ messages, model, providerParam }) {
       const retryLabel = attempt ? ` (retry ${attempt}/${MAX_PROVIDER_RETRIES})` : '';
       console.log(`[Gateway] Attempting completion with provider: '${name}'${retryLabel}`);
       try {
-        const result = await adapter.sendChatCompletion({ messages, model });
+        // A model name for the primary provider may not exist on the fallback.
+        const attemptModel = name === chain[0] ? model : undefined;
+        const result = await adapter.sendChatCompletion({ messages, model: attemptModel });
         circuit.recordSuccess(name);
         console.log(`[Gateway] Request successfully served by provider: '${name}'`);
         return {

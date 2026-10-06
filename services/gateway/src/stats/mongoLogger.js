@@ -5,6 +5,13 @@ let db = null;
 let connectionPromise = null;
 let connectionRetryAt = 0;
 let connectionError = null;
+let unavailableWarningLogged = false;
+
+export function warnMongoUnavailable(err) {
+  if (unavailableWarningLogged) return;
+  unavailableWarningLogged = true;
+  console.warn(`[MongoDB] Unavailable: ${err.message}. Local JSON history remains active; start MongoDB to enable persistent summaries.`);
+}
 
 async function getDb() {
   const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cortexgate';
@@ -12,12 +19,22 @@ async function getDb() {
   if (Date.now() < connectionRetryAt) throw connectionError;
   if (!connectionPromise) {
     connectionPromise = (async () => {
-      client = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 });
-      await client.connect();
-      // Target cortexgate database explicitly
-      db = client.db('cortexgate');
-      console.log(`[MongoDB] Connected successfully to ${uri} (database: cortexgate)`);
-      return db;
+      const nextClient = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 });
+      try {
+        await nextClient.connect();
+        client = nextClient;
+        db = nextClient.db();
+        console.log(`[MongoDB] Connected successfully (database: ${db.databaseName})`);
+        unavailableWarningLogged = false;
+        return db;
+      } catch (err) {
+        try {
+          await nextClient.close();
+        } catch (closeError) {
+          console.warn(`[MongoDB] Could not close failed connection: ${closeError.message}`);
+        }
+        throw err;
+      }
     })().catch(err => {
       connectionPromise = null;
       connectionError = err;
@@ -61,7 +78,7 @@ export async function logRequestToMongo(entry) {
     return { persisted: true };
   } catch (err) {
     // Mongo logger failure must never crash the gateway or lose local history.
-    console.warn(`[MongoDB Logger Warning] Failed to log request: ${err.message}`);
+    warnMongoUnavailable(err);
     return { persisted: false, error: err.message };
   }
 }
@@ -156,7 +173,7 @@ export async function getMongoSummary() {
       hitRate: res.totalRequests ? (res.cacheHits / res.totalRequests) : 0
     };
   } catch (err) {
-    console.warn(`[MongoDB Summary Error] ${err.message}`);
+    warnMongoUnavailable(err);
     return {
       error: `MongoDB unreachable: ${err.message}`,
       totalRequests: 0,

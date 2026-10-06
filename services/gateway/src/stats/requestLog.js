@@ -1,6 +1,6 @@
 // Request history for the dashboard. Persisted to disk, so it survives restarts.
 import * as persist from './persist.js';
-import { logRequestToMongo } from './mongoLogger.js';
+import { logRequestToMongo, warnMongoUnavailable } from './mongoLogger.js';
 
 const MAX_ENTRIES = 200;
 const saved = persist.load('requests', null);
@@ -24,11 +24,15 @@ export async function record(entry) {
   byProvider[entry.provider] = (byProvider[entry.provider] || 0) + 1;
   persistNow();
 
-  // Local history updates immediately; Mongo persistence is awaited by the route
-  // so the dashboard can read the row back as soon as the request completes.
-  const result = await logRequestToMongo(row);
-  if (!result.persisted) mongoWriteError = result.error || 'MongoDB write failed';
-  return result;
+  // MongoDB is optional and must not delay completion or provider failover.
+  void logRequestToMongo(row)
+    .then(result => {
+      if (!result.persisted) mongoWriteError = result.error || 'MongoDB write failed';
+    })
+    .catch(err => {
+      mongoWriteError = err.message || 'MongoDB write failed';
+      warnMongoUnavailable(err);
+    });
 }
 
 export function getLive() {
