@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# runtime data (cache, request history) and installer backups
+services/gateway/data/
+.backup-before-update/

@@ -1,18 +1,11 @@
 import { Router } from 'express';
-import { providers, getProviderChain } from '../providers/index.js';
+import { providers } from '../providers/index.js';
 import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
+import * as circuit from '../gateway/circuitBreaker.js';
+import { dispatch } from '../gateway/dispatch.js';
 
 const router = Router();
-
-function isRetryableError(error) {
-  if (!error) return false;
-  const status = error.status;
-  if (!status) return true; // Network error, timeout, etc.
-  if (status === 429) return true; // Too Many Requests / Rate limit
-  if (status >= 500 && status < 600) return true; // 5xx Server Error
-  return false;
-}
 
 router.post('/completions', async (req, res) => {
   const { messages, model, provider: requestedProvider } = req.body || {};
@@ -28,17 +21,22 @@ router.post('/completions', async (req, res) => {
 
   const startedAt = Date.now();
   const promptPreview = String(messages[messages.length - 1]?.content ?? '').slice(0, 70);
-  const failedProviders = [];
 
   // --- Semantic cache lookup (skipped if x-cache: bypass) ---
   const useCache = req.headers['x-cache'] !== 'bypass';
-  let cacheCtx = { vector: null, hit: null, key: null };
+  let cacheCtx = { vector: null, hit: null, key: null, rejected: null, verifyCost: 0, verifyFailed: false };
   if (useCache) {
     cacheCtx = await semanticCache.lookup(messages);
     if (cacheCtx.hit) {
-      const { entry, similarity } = cacheCtx.hit;
-      console.log(`[Gateway] CACHE HIT (similarity ${similarity.toFixed(3)}) - saved $${entry.cost.toFixed(6)}`);
-      requestLog.record({ provider: 'cache', cache: true, similarity, cost: 0, savedCost: entry.cost, savedTokens: entry.response.usage?.total_tokens || 0, latencyMs: Date.now() - startedAt, prompt: promptPreview, failedProviders: [], status: 'ok' });
+      const { entry, similarity, verified } = cacheCtx.hit;
+      console.log(`[Gateway] CACHE HIT (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''}) - saved $${entry.cost.toFixed(6)}`);
+      requestLog.record({
+        provider: 'cache', cache: true, similarity, verified,
+        cost: 0, verifyCost: cacheCtx.verifyCost, savedCost: entry.cost,
+        savedTokens: entry.response.usage?.total_tokens || 0,
+        latencyMs: Date.now() - startedAt, prompt: promptPreview,
+        failedProviders: [], skippedProviders: [], status: 'ok'
+      });
       return res.json({
         id: `chatcmpl-${Date.now()}`,
         object: 'chat.completion',
@@ -48,82 +46,53 @@ router.post('/completions', async (req, res) => {
         usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
         provider: 'cache',
         cost: 0,
-        cache: { hit: true, similarity, original_provider: entry.provider, saved_cost: entry.cost, saved_tokens: entry.response.usage?.total_tokens || 0 }
+        cache: {
+          hit: true, similarity, verified,
+          original_provider: entry.provider,
+          saved_cost: entry.cost,
+          saved_tokens: entry.response.usage?.total_tokens || 0
+        }
       });
     }
   }
 
   const providerParam = requestedProvider || req.headers['x-provider'];
-  const providerChain = getProviderChain(providerParam);
+  const out = await dispatch({ messages, model, providerParam });
 
-  let lastError = null;
-  let result = null;
-  let servingProvider = null;
+  const verification = cacheCtx.rejected ? 'rejected' : cacheCtx.verifyFailed ? 'failed' : null;
+  const common = {
+    latencyMs: Date.now() - startedAt, prompt: promptPreview,
+    failedProviders: out.failedProviders, skippedProviders: out.skipped,
+    verification, nearSimilarity: cacheCtx.rejected?.similarity ?? null,
+    verifyCost: cacheCtx.verifyCost || 0
+  };
 
-  for (let i = 0; i < providerChain.length; i++) {
-    const pName = providerChain[i];
-    const adapter = providers[pName];
-
-    console.log(`[Gateway] Attempting completion with provider: '${pName}'`);
-
-    try {
-      result = await adapter.sendChatCompletion({ messages, model });
-      servingProvider = pName;
-      console.log(`[Gateway] Request successfully served by provider: '${servingProvider}'`);
-      break;
-    } catch (err) {
-      lastError = err;
-      failedProviders.push(pName);
-      const statusStr = err.status ? `(status ${err.status})` : '(network/timeout error)';
-      console.warn(`[Gateway] Provider '${pName}' failed ${statusStr}: ${err.message}`);
-
-      const hasNext = i < providerChain.length - 1;
-      if (isRetryableError(err) && hasNext) {
-        console.log(`[Gateway] Failover triggered: retrying with next provider in chain...`);
-        continue;
-      } else {
-        break;
-      }
-    }
-  }
-
-  if (result) {
-    const adapter = providers[servingProvider];
-    const cost = adapter ? adapter.calculateCost(result.usage, result.model) : 0;
-
-    // Write to cache (sync here is cheap; in-memory)
+  if (out.result) {
     if (useCache) {
-      semanticCache.store({ vector: cacheCtx.vector, key: cacheCtx.key, response: result, cost, provider: servingProvider });
+      semanticCache.store({ vector: cacheCtx.vector, key: cacheCtx.key, response: out.result, cost: out.cost, provider: out.provider });
     }
-
-    requestLog.record({ provider: servingProvider, cache: false, cost, tokens: result.usage?.total_tokens || 0, latencyMs: Date.now() - startedAt, prompt: promptPreview, failedProviders, status: 'ok' });
+    requestLog.record({
+      provider: out.provider, cache: false, cost: out.cost,
+      tokens: out.result.usage?.total_tokens || 0, status: 'ok', ...common
+    });
     return res.json({
       id: `chatcmpl-${Date.now()}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: result.model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: result.content
-          },
-          finish_reason: 'stop'
-        }
-      ],
-      usage: result.usage,
-      provider: servingProvider,
-      cost,
-      cache: { hit: false }
+      model: out.result.model,
+      choices: [{ index: 0, message: { role: 'assistant', content: out.result.content }, finish_reason: 'stop' }],
+      usage: out.result.usage,
+      provider: out.provider,
+      cost: out.cost,
+      cache: { hit: false, rejected_near_match: cacheCtx.rejected ? cacheCtx.rejected.similarity : undefined }
     });
   }
 
-  const status = lastError?.status || 500;
-  requestLog.record({ provider: 'none', cache: false, cost: 0, latencyMs: Date.now() - startedAt, prompt: promptPreview, failedProviders, status: 'error' });
+  const status = out.lastError?.status || 500;
+  requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', ...common });
   return res.status(status).json({
     error: {
-      message: lastError?.message || 'Failed to process chat completion request across all configured providers',
+      message: out.lastError?.message || 'Failed to process chat completion request across all configured providers',
       type: 'api_error',
       status
     }
@@ -135,7 +104,19 @@ router.get('/stats', (req, res) => {
 });
 
 router.get('/live', (req, res) => {
-  res.json({ cache: semanticCache.getStats(), ...requestLog.getLive() });
+  res.json({
+    cache: semanticCache.getStats(),
+    ...requestLog.getLive(),
+    breakers: circuit.getStatus(Object.keys(providers))
+  });
+});
+
+// Wipe cache + history (handy before a demo).
+router.post('/reset', (req, res) => {
+  semanticCache.clear();
+  requestLog.clear();
+  circuit.resetAll();
+  res.json({ ok: true });
 });
 
 export default router;

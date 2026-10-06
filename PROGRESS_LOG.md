@@ -20,3 +20,4 @@ For project documentation, see [README.md](README.md).
 - Oct 1 - Known issues: Gemini usage undercounts thinking tokens (cost understated) and gemini-3.8-flash is missing from the pricing table; fix pending in providers/gemini.js
 - Oct 1 - Cache verified end to end with live embeddings: paraphrase hit at similarity 0.992 (saved 119 tokens), 'capital of Italy' correctly missed
 
+- Oct 2 - Cache match verification (blocks wrong hits like animal vs bird), disk persistence for cache and history, live .env reload, circuit breaker, dashboard health strip and reset

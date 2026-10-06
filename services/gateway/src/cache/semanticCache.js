@@ -1,7 +1,10 @@
 import crypto from 'crypto';
 import { embed } from './embedder.js';
+import { areSameQuestion } from './verifier.js';
+import * as persist from '../stats/persist.js';
 
-// In-memory store for the mid-term demo. Later: swap `entries` for Qdrant/pgvector.
+// In-memory store, saved to disk (data/cache.json) so it survives restarts.
+// Later: swap `entries` for Qdrant/pgvector.
 const entries = [];
 
 const stats = {
@@ -9,12 +12,35 @@ const stats = {
   hits: 0,
   misses: 0,
   tokensSaved: 0,
-  costSaved: 0 // USD, counterfactual: what the avoided call would have cost
+  costSaved: 0,      // USD, counterfactual: what the avoided call would have cost
+  verifications: 0,  // second-opinion checks on borderline matches
+  rejections: 0,     // wrong hits blocked by the check
+  verifyErrors: 0,
+  verifyCost: 0      // USD spent on those checks
 };
 
 const threshold = () => parseFloat(process.env.CACHE_THRESHOLD || '0.92');
-const ttlMs = () => parseInt(process.env.CACHE_TTL_MS || String(60 * 60 * 1000), 10);
+const trustAbove = () => parseFloat(process.env.CACHE_TRUST_ABOVE || '0.985');
+const verifyOn = () => (process.env.CACHE_VERIFY || 'true').toLowerCase() !== 'false';
+const ttlMs = () => parseInt(process.env.CACHE_TTL_MS || String(24 * 60 * 60 * 1000), 10);
 const maxEntries = () => parseInt(process.env.CACHE_MAX_ENTRIES || '500', 10);
+
+// ---- load from disk ----
+const savedCache = persist.load('cache', null);
+if (Array.isArray(savedCache?.entries)) {
+  const now = Date.now();
+  for (const e of savedCache.entries) {
+    if (now - e.createdAt <= ttlMs()) entries.push(e);
+  }
+  console.log(`[Cache] Restored ${entries.length} entries from disk`);
+}
+Object.assign(stats, persist.load('cache-stats', {}));
+
+const round = v => v.map(x => Math.round(x * 1e5) / 1e5);
+const persistEntries = () => persist.save('cache', () => ({
+  entries: entries.map(e => ({ ...e, vector: round(e.vector) }))
+}), 1000);
+const persistStats = () => persist.save('cache-stats', () => stats, 500);
 
 export function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
@@ -43,22 +69,30 @@ export function extractKey(messages) {
   return { text, namespace, cacheable };
 }
 
-/** Returns { vector, hit } — hit is null on a miss. Never throws. */
+/**
+ * Returns { vector, key, hit, rejected, verifyCost, verifyFailed }.
+ * hit = { entry, similarity, verified } or null. Never throws.
+ */
 export async function lookup(messages) {
   const { text, namespace, cacheable } = extractKey(messages);
   stats.requests++;
-  if (!cacheable) {
+
+  const miss = (extra = {}) => {
     stats.misses++;
-    return { vector: null, hit: null, key: null };
-  }
+    persistStats();
+    return { vector: null, key: null, hit: null, rejected: null, verifyCost: 0, verifyFailed: false, ...extra };
+  };
+
+  if (!cacheable) return miss();
+
   let vector;
   try {
     vector = await embed(text);
   } catch (err) {
     console.warn(`[Cache] Embedding failed, skipping cache: ${err.message}`);
-    stats.misses++;
-    return { vector: null, hit: null, key: null };
+    return miss();
   }
+  const key = { text, namespace };
 
   const now = Date.now();
   let best = null;
@@ -68,25 +102,51 @@ export async function lookup(messages) {
     const score = cosineSimilarity(vector, e.vector);
     if (score > bestScore) { bestScore = score; best = e; }
   }
-
   console.log(`[Cache] Best similarity: ${bestScore.toFixed(3)} (threshold ${threshold()})`);
-  if (best && bestScore >= threshold()) {
+
+  if (!best || bestScore < threshold()) return miss({ vector, key });
+
+  const registerHit = (verified, verifyCost) => {
     best.lastUsed = now;
     stats.hits++;
     stats.tokensSaved += best.response.usage?.total_tokens || 0;
     stats.costSaved += best.cost;
-    return { vector, hit: { entry: best, similarity: bestScore }, key: { text, namespace } };
+    persistStats();
+    return {
+      vector, key, rejected: null, verifyCost, verifyFailed: false,
+      hit: { entry: best, similarity: bestScore, verified }
+    };
+  };
+
+  // Very close match: trust it. Borderline match: ask a model to confirm.
+  if (!verifyOn() || bestScore >= trustAbove()) return registerHit(false, 0);
+
+  console.log(`[Cache] Borderline match (${bestScore.toFixed(3)}), verifying...`);
+  const v = await areSameQuestion(best.prompt, text);
+  stats.verifications++;
+  stats.verifyCost += v.cost || 0;
+
+  if (v.same === true) {
+    // Remember the new wording so next time it is an exact (trusted) match.
+    entries.push({ ...best, prompt: text, vector, createdAt: now, lastUsed: now, alias: true });
+    persistEntries();
+    return registerHit(true, v.cost || 0);
   }
-  stats.misses++;
-  return { vector, hit: null, key: { text, namespace } };
+  if (v.same === false) {
+    stats.rejections++;
+    console.log(`[Cache] Match REJECTED by verification: "${best.prompt}" vs "${text}"`);
+    return miss({ vector, key, rejected: { similarity: bestScore, against: best.prompt }, verifyCost: v.cost || 0 });
+  }
+  stats.verifyErrors++;
+  console.warn('[Cache] Verification failed, treating as a miss (precision first)');
+  return miss({ vector, key, verifyFailed: true, verifyCost: v.cost || 0 });
 }
 
 /** Store a successful answer. Call after the provider responds. */
 export function store({ vector, key, response, cost, provider }) {
   if (!vector || !key) return;
   if (entries.length >= maxEntries()) {
-    // least-recently-used eviction
-    let idx = 0;
+    let idx = 0; // least-recently-used eviction
     for (let i = 1; i < entries.length; i++) {
       if (entries[i].lastUsed < entries[idx].lastUsed) idx = i;
     }
@@ -97,17 +157,24 @@ export function store({ vector, key, response, cost, provider }) {
     namespace: key.namespace, prompt: key.text, vector,
     response, cost, provider, createdAt: now, lastUsed: now
   });
+  persistEntries();
 }
 
 export function getStats() {
   return {
     ...stats,
+    netCostSaved: stats.costSaved - stats.verifyCost,
     hitRate: stats.requests ? stats.hits / stats.requests : 0,
     entries: entries.length,
-    threshold: threshold()
+    threshold: threshold(),
+    trustAbove: trustAbove(),
+    verifyEnabled: verifyOn()
   };
 }
 
 export function clear() {
   entries.length = 0;
+  for (const k of Object.keys(stats)) stats[k] = 0;
+  persistEntries();
+  persistStats();
 }

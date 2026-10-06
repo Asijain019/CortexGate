@@ -9,11 +9,16 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1b212a; --text:#e8ecf2; --muted:#93a0b2; --line:#2a323e; } }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:18px 24px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  header { padding:18px 24px 8px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
   h1 { margin:0; font-size:20px; } h1 span { color:var(--muted); font-weight:400; font-size:14px; margin-left:8px; }
   #status { font-size:13px; color:var(--muted); }
   #status.bad { color:var(--red); }
-  main { padding:0 24px 32px; max-width:1100px; margin:0 auto; }
+  main { padding:0 24px 32px; max-width:1150px; margin:0 auto; }
+  #health { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 14px; font-size:13px; align-items:center; }
+  .pill { padding:3px 10px; border-radius:99px; font-weight:600; font-size:12px; }
+  .p-ok { background:rgba(26,157,92,.15); color:var(--green); }
+  .p-open { background:rgba(201,59,59,.15); color:var(--red); }
+  .p-probe { background:rgba(194,122,10,.17); color:var(--amber); }
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:18px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   .card .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
@@ -21,15 +26,17 @@
   .card .sub { font-size:12px; color:var(--muted); margin-top:2px; }
   .green { color:var(--green); }
   section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
-  section h2 { margin:0 0 10px; font-size:15px; }
+  section h2 { margin:0 0 10px; font-size:15px; display:flex; justify-content:space-between; align-items:center; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   input[type=text] { flex:1; min-width:220px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font-size:14px; }
+  select { padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
   button { padding:9px 16px; border:0; border-radius:8px; background:var(--blue); color:#fff; font-size:14px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); padding:5px 10px; font-size:12px; }
   button:disabled { opacity:.6; cursor:default; }
   label.chk { font-size:13px; color:var(--muted); display:flex; gap:5px; align-items:center; }
   #answer { margin-top:10px; font-size:14px; white-space:pre-wrap; min-height:20px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--card); }
   td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   tr:last-child td { border-bottom:0; }
   .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
@@ -37,10 +44,11 @@
   .b-groq { background:rgba(42,111,219,.15); color:var(--blue); }
   .b-gemini { background:rgba(194,122,10,.17); color:var(--amber); }
   .b-none { background:rgba(201,59,59,.15); color:var(--red); }
-  .tag-fo { margin-left:6px; font-size:11px; color:var(--amber); }
+  .tag { display:block; margin-top:3px; font-size:11px; }
+  .tag.amber { color:var(--amber); } .tag.green { color:var(--green); } .tag.red { color:var(--red); } .tag.muted { color:var(--muted); }
   .muted { color:var(--muted); }
   .note { font-size:12px; color:var(--muted); margin-top:8px; }
-  .scroll { overflow-x:auto; }
+  .scroll { overflow:auto; max-height:520px; }
 </style>
 </head>
 <body>
@@ -49,12 +57,15 @@
   <div id="status">connecting...</div>
 </header>
 <main>
+  <div id="health"></div>
+
   <div class="cards">
     <div class="card"><div class="label">Requests</div><div class="value" id="c-req">0</div><div class="sub" id="c-split">0 hits / 0 misses</div></div>
     <div class="card"><div class="label">Cache hit rate</div><div class="value" id="c-rate">0%</div><div class="sub" id="c-entries">0 entries cached</div></div>
     <div class="card"><div class="label">Tokens saved</div><div class="value green" id="c-tok">0</div><div class="sub">served from cache</div></div>
-    <div class="card"><div class="label">Cost saved</div><div class="value green" id="c-saved">$0</div><div class="sub">counterfactual (list price)</div></div>
+    <div class="card"><div class="label">Cost saved</div><div class="value green" id="c-saved">$0</div><div class="sub" id="c-net">counterfactual (list price)</div></div>
     <div class="card"><div class="label">Actually spent</div><div class="value" id="c-spent">$0</div><div class="sub" id="c-fo">0 failovers</div></div>
+    <div class="card"><div class="label">Wrong hits blocked</div><div class="value" id="c-rej">0</div><div class="sub" id="c-ver">0 match checks</div></div>
   </div>
 
   <section>
@@ -62,7 +73,7 @@
     <div class="row">
       <input type="text" id="prompt" placeholder="Ask something, then ask it again in different words..." />
       <label class="chk"><input type="checkbox" id="bypass"> bypass cache</label>
-      <select id="prov" style="padding:9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
+      <select id="prov">
         <option value="">auto (failover chain)</option>
         <option value="groq">force groq first</option>
         <option value="gemini">force gemini first</option>
@@ -73,14 +84,14 @@
   </section>
 
   <section>
-    <h2>Recent requests</h2>
+    <h2>Request history <button class="ghost" id="reset">Reset demo data</button></h2>
     <div class="scroll">
       <table>
         <thead><tr><th>Time</th><th>Answered by</th><th>Prompt</th><th>Latency</th><th>Cost</th><th>Saved</th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="muted">No requests yet.</td></tr></tbody>
       </table>
     </div>
-    <div class="note">Cost saved is a counterfactual: what the avoided provider call would have cost at list price. Free-tier calls are billed at $0 in practice.</div>
+    <div class="note">History and the cache are saved on the server, so they survive restarts. Cost saved is a counterfactual: what the avoided provider call would have cost at list price. Free-tier calls are billed at $0 in practice.</div>
   </section>
 </main>
 
@@ -91,6 +102,34 @@ const $ = id => document.getElementById(id);
 
 function badge(provider) {
   return `<span class="badge b-${esc(provider)}">${esc(provider.toUpperCase())}</span>`;
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString() : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString();
+}
+
+function renderHealth(breakers) {
+  const pills = Object.entries(breakers || {}).map(([name, b]) => {
+    if (b.state === 'open') return `<span class="pill p-open" title="${esc(b.lastError)}">${esc(name)}: unhealthy, retry in ${Math.ceil(b.retryInMs / 1000)}s</span>`;
+    if (b.state === 'probing') return `<span class="pill p-probe">${esc(name)}: rechecking</span>`;
+    return `<span class="pill p-ok">${esc(name)}: healthy</span>`;
+  });
+  $('health').innerHTML = '<span class="muted">Providers:</span> ' + pills.join(' ');
+}
+
+function rowHtml(e) {
+  const tags = [];
+  if (e.failedProviders && e.failedProviders.length) tags.push(`<span class="tag amber">failover from ${esc(e.failedProviders.join(', '))}</span>`);
+  if (e.skippedProviders && e.skippedProviders.length) tags.push(`<span class="tag amber">${esc(e.skippedProviders.join(', '))} skipped (unhealthy)</span>`);
+  if (e.verified) tags.push('<span class="tag green">near match confirmed by check</span>');
+  if (e.verification === 'rejected') tags.push(`<span class="tag red">wrong match blocked (${Number(e.nearSimilarity).toFixed(3)})</span>`);
+  if (e.verification === 'failed') tags.push('<span class="tag muted">match check failed, answered fresh</span>');
+  const sim = e.cache && e.similarity ? ` <span class="muted">(${e.similarity.toFixed(3)})</span>` : '';
+  const check = e.verifyCost > 0 ? `<div class="muted">+${usd(e.verifyCost)} check</div>` : '';
+  const saved = e.cache ? `<span class="green">${usd(e.savedCost)}</span>` : '<span class="muted">-</span>';
+  return `<tr><td class="muted">${fmtTime(e.time)}</td><td>${badge(e.provider)}${sim}${tags.join('')}</td><td>${esc(e.prompt)}</td><td>${e.latencyMs} ms</td><td>${usd(e.cost)}${check}</td><td>${saved}</td></tr>`;
 }
 
 async function refresh() {
@@ -104,17 +143,14 @@ async function refresh() {
     $('c-entries').textContent = `${c.entries} entries cached`;
     $('c-tok').textContent = c.tokensSaved.toLocaleString();
     $('c-saved').textContent = usd(c.costSaved);
+    $('c-net').textContent = c.verifications ? `net ${usd(c.netCostSaved)} after checks` : 'counterfactual (list price)';
     $('c-spent').textContent = usd(d.totals.spent);
     $('c-fo').textContent = `${d.totals.failovers} failover${d.totals.failovers === 1 ? '' : 's'}`;
+    $('c-rej').textContent = c.rejections;
+    $('c-ver').textContent = `${c.verifications} match check${c.verifications === 1 ? '' : 's'}`;
+    renderHealth(d.breakers);
 
-    const rows = d.recent.map(e => {
-      const t = new Date(e.time).toLocaleTimeString();
-      const fo = e.failedProviders && e.failedProviders.length ? `<span class="tag-fo">failover from ${esc(e.failedProviders.join(', '))}</span>` : '';
-      const sim = e.cache && e.similarity ? ` <span class="muted">(${e.similarity.toFixed(3)})</span>` : '';
-      const saved = e.cache ? `<span class="green">${usd(e.savedCost)}</span>` : '<span class="muted">-</span>';
-      return `<tr><td class="muted">${t}</td><td>${badge(e.provider)}${sim}${fo}</td><td>${esc(e.prompt)}</td><td>${e.latencyMs} ms</td><td>${usd(e.cost)}</td><td>${saved}</td></tr>`;
-    });
-    $('rows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6" class="muted">No requests yet.</td></tr>';
+    $('rows').innerHTML = d.recent.length ? d.recent.map(rowHtml).join('') : '<tr><td colspan="6" class="muted">No requests yet.</td></tr>';
     $('status').textContent = 'live, updated ' + new Date().toLocaleTimeString();
     $('status').className = '';
   } catch (e) {
@@ -137,7 +173,7 @@ async function send() {
     const r = await fetch('/v1/chat/completions', { method: 'POST', headers, body: JSON.stringify(body) });
     const d = await r.json();
     if (d.error) throw new Error(d.error.message);
-    const via = d.provider === 'cache' ? `cache (similarity ${d.cache.similarity.toFixed(3)})` : d.provider;
+    const via = d.provider === 'cache' ? `cache (similarity ${d.cache.similarity.toFixed(3)}${d.cache.verified ? ', confirmed' : ''})` : d.provider;
     $('answer').className = '';
     $('answer').textContent = `[${via}] ` + (d.choices?.[0]?.message?.content ?? '');
   } catch (e) {
@@ -148,7 +184,15 @@ async function send() {
   refresh();
 }
 
+async function resetData() {
+  if (!confirm('Clear the cache and all request history?')) return;
+  await fetch('/v1/chat/reset', { method: 'POST' });
+  $('answer').textContent = '';
+  refresh();
+}
+
 $('send').addEventListener('click', send);
+$('reset').addEventListener('click', resetData);
 $('prompt').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
 refresh();
 setInterval(refresh, 2000);
