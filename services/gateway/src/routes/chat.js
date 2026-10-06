@@ -4,6 +4,7 @@ import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
 import * as circuit from '../gateway/circuitBreaker.js';
 import { dispatch } from '../gateway/dispatch.js';
+import { getMongoSummary } from '../stats/mongoLogger.js';
 
 const router = Router();
 
@@ -117,6 +118,11 @@ router.post('/reset', (req, res) => {
   requestLog.clear();
   circuit.resetAll();
   res.json({ ok: true });
+});
+
+router.get('/summary', async (req, res) => {
+  const summary = await getMongoSummary();
+  res.json(summary);
 });
 
 export default router;

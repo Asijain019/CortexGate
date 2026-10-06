@@ -24,3 +24,5 @@ For project documentation, see [README.md](README.md).
 - Oct 6 - Cache matches between 0.88 and 0.985 are confirmed by a model check against the stored answer. Live results: blocked wrong matches (10 miles to km vs km to miles 0.981, celsius vs fahrenheit 0.928, tallest vs second tallest mountain 0.930) and confirmed real paraphrases (Delhi/Mumbai distance 0.971)
 - Oct 6 - README updated: features, API, configuration, limitations and project structure now match the code
 - Oct 6 - Live test results: 15+27 vs 15+72, Hamlet vs Macbeth, India vs China population, celsius vs fahrenheit and km vs miles all handled correctly; Delhi/Mumbai distance paraphrase hit (0.971). Known risks: negated questions (python) and time-sensitive prompts (today's date, current PM) can be served from cache
+- Oct 2 - Fixed gemini.js: default model set to gemini-3.8-flash, added pricing entry, and corrected token calculation to account for hidden thinking tokens.
+- Oct 2 - Added MongoDB request logger (mongoLogger.js) with non-blocking fire-and-forget logging and GET /v1/chat/summary aggregation endpoint.
