@@ -36,3 +36,4 @@ Chronological record of project changes, oldest first. For current behavior and 
 - Added a one-time Gemini fallback-model attempt for 429/503 responses, configurable with `GEMINI_FALLBACK_MODEL`; stopped passing Groq-only model names when Groq's circuit is open and made 504 provider timeouts fail over without same-provider retries.
 - Documented the main gateway files, current provider fallback behavior, and how to demo Groq-to-Gemini failover; added `npm test`.
 - Clarified that dashboard API costs are list-price estimates rather than actual billing data, exposed estimated savings after verifier calls, and documented that embedding usage is not yet included.
+- Added `PROJECT_SCOPE.md` to separate implemented midterm work from proposed post-midterm features; updated README planned features for provider expansion, complexity-aware routing, custom endpoints, quota controls, evaluation, and dashboard analytics.

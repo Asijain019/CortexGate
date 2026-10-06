@@ -4,7 +4,7 @@
 
 CortexGate is a self-hosted gateway that sits between an application and multiple Large Language Model (LLM) providers. The application talks to one OpenAI-compatible endpoint, and CortexGate applies a control plane to every request: semantic caching, provider failover, and cost tracking.
 
-> **Status: mid-term prototype (updated Oct 6, 2026).** The gateway, Groq-to-Gemini failover, semantic cache, request history, and live dashboard are implemented. Gemini retries an overloaded/rate-limited chat model once using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are not yet built. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record.
+> **Status: mid-term prototype (updated Oct 6, 2026).** The gateway, Groq-to-Gemini failover, semantic cache, request history, and live dashboard are implemented. Gemini retries an overloaded/rate-limited chat model once using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are proposals, not implemented functionality. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for completed midterm work and the proposed post-midterm plan.
 
 *Major Project (PR1107), Institute of Engineering and Technology (IET), JK Lakshmipat University.*
 
@@ -24,19 +24,23 @@ CortexGate addresses these by inserting a gateway between the application and th
 |---|---|
 | OpenAI-compatible endpoint (`/v1/chat/completions`) | Implemented |
 | Provider adapters: Groq, Gemini | Implemented |
-| Automatic failover on 5xx, 429 and timeout | Implemented |
+| Configurable provider order, failover on provider errors, and Gemini model fallback on 429/503 | Implemented |
 | Semantic cache (embeddings + cosine similarity, saved to disk) | Implemented |
 | Match verification (a model confirms borderline cache matches against the stored answer) | Implemented |
 | Circuit breaker (skips an unhealthy provider for a short time) | Implemented |
 | Live `.env` reload and persistent request history | Implemented |
-| Per-request cost calculation and savings tracking | Implemented |
-| Live dashboard (polling) with hit rate, tokens and cost saved, recent requests | Implemented |
+| Token-based list-price estimates for chat and verification calls | Implemented |
+| Live dashboard with cache metrics, request history, estimated costs, and failovers | Implemented |
 | MongoDB request logging with estimated vs counterfactual list-price cost | Implemented |
-| Vector database for the cache (Qdrant / pgvector) | Planned |
-| Token-bucket rate limiting with priority queue (Redis, BullMQ) | Planned |
-| Model cascading with quality verification and escalation | Planned |
-| Free-tier-aware quota scheduler | Planned |
-| React + WebSocket dashboard, budgets and alerts | Planned |
+| Additional provider adapters (for example Mistral, Cloudflare Workers AI, Cohere, OpenRouter, Hugging Face, and local Ollama) | Planned |
+| Request-complexity / quality-aware routing across lightweight and stronger models | Planned |
+| Dashboard-managed custom OpenAI-compatible endpoints and user-supplied model credentials | Planned |
+| Configurable per-provider quotas, rate limiting, retry policies, and request queue | Planned |
+| Cache quality controls and complete cost accounting, including embedding usage | Planned |
+| Provider comparison benchmarks for latency, reliability, quality, and estimated cost | Planned |
+| Dashboard analytics: provider health/latency, quota use, cache funnel, and savings trends | Planned |
+| Vector database for the cache (Qdrant / pgvector) | Future option |
+| Team controls, budgets, alerts, and a React + WebSocket dashboard | Stretch scope |
 
 ## How it works
 
@@ -66,12 +70,12 @@ flowchart TD
 ## Tech stack
 
 - **Runtime:** Node.js (18+), Express
-- **LLM providers:** Groq, Google Gemini (REST APIs, free tiers)
+- **LLM providers:** Groq and Google Gemini (hosted APIs; account pricing and quotas vary)
 - **Embeddings:** Gemini embedding API (`gemini-embedding-001`, task type `SEMANTIC_SIMILARITY`)
 - **Cache store:** in-memory vector list (Qdrant / pgvector planned)
 - **Dashboard:** plain HTML + JavaScript, polling
 - **Persistence:** local JSON history and optional MongoDB request logging
-- **Planned:** Redis, BullMQ, Qdrant/pgvector, React + WebSocket dashboard
+- **Planned:** additional provider adapters, request-aware routing, quota/rate controls, and expanded analytics; see [PROJECT_SCOPE.md](PROJECT_SCOPE.md)
 
 ## Project structure
 
@@ -79,6 +83,7 @@ flowchart TD
 CortexGate/
 ├── README.md
 ├── PROGRESS_LOG.md
+├── PROJECT_SCOPE.md
 └── services/gateway/
     ├── package.json
     ├── .env.example
@@ -224,11 +229,13 @@ Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sa
 
 ## Roadmap
 
-1. Vector database (Qdrant / pgvector) for the cache
-2. Rate limiting and priority queueing (Redis, BullMQ)
-3. Model cascading with verification and escalation
-4. Free-tier-aware quota scheduler
-5. React + WebSocket dashboard with budgets and alerts
+1. Add one additional hosted provider and local Ollama support; standardize adapter behavior.
+2. Build explainable complexity/quality-aware routing with manual model overrides.
+3. Add configurable quota and rate controls, bounded retries, and optional request queueing.
+4. Complete embedding/verifier cost accounting and benchmark provider/cache quality.
+5. Expand dashboard provider, routing, cache, quota, and evaluation analytics; support secure custom OpenAI-compatible endpoints.
+
+See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for candidate providers, implementation phases, dashboard ideas, and stretch goals.
 
 ## Team
 
@@ -243,3 +250,7 @@ Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sa
 ## Contributing
 
 Work on a feature branch, never directly on `main`. Add one line to [PROGRESS_LOG.md](PROGRESS_LOG.md) with each commit, and never commit `.env` or API keys.
+
+## Project scope
+
+See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for a summary of the work completed by midterm, the proposed post-midterm implementation, candidate no-subscription provider integrations, dashboard additions, and stretch goals. Provider free-tier terms and quotas change; verify current eligibility before planning around them.
