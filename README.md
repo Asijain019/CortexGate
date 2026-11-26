@@ -379,6 +379,4 @@ Free tiers and quotas change; verify current terms before relying on them.
 
 **Faculty guide:** Dr. Pranab Roy
 
-## Contributing
 
-Add a line to [PROGRESS_LOG.md](PROGRESS_LOG.md) with each change, run `npm test` before committing, and never commit `.env`, `data/` or API keys.
