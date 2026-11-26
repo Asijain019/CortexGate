@@ -4,7 +4,7 @@
 
 CortexGate is a self-hosted gateway that sits between an application and multiple Large Language Model (LLM) providers. The application talks to one OpenAI-compatible endpoint, and CortexGate applies a control plane to every request: semantic caching, provider failover, and cost tracking.
 
-> **Status: mid-term prototype (updated Oct 6, 2026).** The gateway, Groq-to-Gemini failover, semantic cache, request history, and live dashboard are implemented. Gemini retries an overloaded/rate-limited chat model once using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are proposals, not implemented functionality. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for completed midterm work and the proposed post-midterm plan.
+> **Status: working prototype.** The gateway, multi-provider failover, semantic cache, request history, live dashboard, and Redis/BullMQ request queue are implemented. Gemini retries an overloaded/rate-limited chat model using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are proposals, not implemented functionality. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for project scope.
 
 *Major Project (PR1107), Institute of Engineering and Technology (IET), JK Lakshmipat University.*
 
@@ -23,7 +23,7 @@ CortexGate addresses these by inserting a gateway between the application and th
 | Feature | Status |
 |---|---|
 | OpenAI-compatible endpoint (`/v1/chat/completions`) | Implemented |
-| Provider adapters: Groq, Gemini | Implemented |
+| Provider adapters: Groq, Gemini, GitHub Models, Hugging Face, Mistral, NVIDIA, OpenRouter, SambaNova | Implemented |
 | Configurable provider order, failover on provider errors, and Gemini model fallback on 429/503 | Implemented |
 | Semantic cache (embeddings + cosine similarity, saved to disk) | Implemented |
 | Match verification (a model confirms borderline cache matches against the stored answer) | Implemented |
@@ -32,15 +32,21 @@ CortexGate addresses these by inserting a gateway between the application and th
 | Token-based list-price estimates for chat and verification calls | Implemented |
 | Live dashboard with cache metrics, request history, estimated costs, and failovers | Implemented |
 | MongoDB request logging with estimated vs counterfactual list-price cost | Implemented |
-| Additional provider adapters (for example Mistral, Cloudflare Workers AI, Cohere, OpenRouter, Hugging Face, and local Ollama) | Planned |
+| Prompt tester, cache bypass, provider override, request filters, reset, and theme switch | Implemented |
+| Token-bucket rate limiting and request queue (Redis, BullMQ) | Implemented |
+| WebSocket metrics endpoint | Implemented |
 | Request-complexity / quality-aware routing across lightweight and stronger models | Planned |
 | Dashboard-managed custom OpenAI-compatible endpoints and user-supplied model credentials | Planned |
-| Configurable per-provider quotas, rate limiting, retry policies, and request queue | Planned |
+| Configurable per-provider quotas and retry policies | Planned |
 | Cache quality controls and complete cost accounting, including embedding usage | Planned |
 | Provider comparison benchmarks for latency, reliability, quality, and estimated cost | Planned |
 | Dashboard analytics: provider health/latency, quota use, cache funnel, and savings trends | Planned |
 | Vector database for the cache (Qdrant / pgvector) | Future option |
 | Team controls, budgets, alerts, and a React + WebSocket dashboard | Stretch scope |
+
+## Dashboard
+
+The gateway serves its live dashboard at `http://localhost:3001/dashboard`. It polls `GET /v1/chat/live` for request history, cache statistics, provider counts, and health. The analytics charts use that same live response, and the prompt tester sends requests to `POST /v1/chat/completions`.
 
 ## How it works
 

@@ -11,7 +11,7 @@ const PRICING = {
 
 const DEFAULT_MODEL = 'gemini-3.8-flash';
 const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
-const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_TIMEOUT_MS = 8_000;
 
 export function calculateCost(usage, model) {
   if (!usage) return 0;

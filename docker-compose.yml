@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  redis:
+    image: redis:7
+    container_name: cortexgate_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+volumes:
+  redis_data:

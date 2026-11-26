@@ -2,16 +2,17 @@
 import { providers, getProviderChain } from '../providers/index.js';
 import * as circuit from './circuitBreaker.js';
 
-const MAX_PROVIDER_RETRIES = 2;
+const MAX_PROVIDER_RETRIES = 1; // 1 retry per provider keeps failover fast; raise if on a stable connection
 
 export function isRetryableError(error) {
   if (!error) return false;
   const status = error.status;
   if (!status) return true;                          // network error, timeout
+  if (status === 400) return true;                   // bad request (e.g. deprecated/unknown model) — try next provider
+  if (status === 404) return true;                   // model/endpoint not found — try next provider
   if (status === 408) return true;                   // request timeout
   if (status === 429) return true;                   // rate limit
-  if (status === 400 || status === 404) return true; // provider-specific request/model rejection
-  if (status === 401 || status === 403) return true; // bad or missing key: try the next provider
+  if (status === 401 || status === 402 || status === 403) return true; // bad key or billing requirement: try next provider
   if (status >= 500 && status < 600) return true;    // provider server error
   return false;
 }

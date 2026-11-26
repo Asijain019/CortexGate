@@ -19,20 +19,21 @@ async function getDb() {
   if (Date.now() < connectionRetryAt) throw connectionError;
   if (!connectionPromise) {
     connectionPromise = (async () => {
-      const nextClient = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 });
+      const connectingClient = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 });
+      client = connectingClient;
       try {
-        await nextClient.connect();
-        client = nextClient;
-        db = nextClient.db();
-        console.log(`[MongoDB] Connected successfully (database: ${db.databaseName})`);
+        await connectingClient.connect();
+        db = connectingClient.db('cortexgate');
+        console.log('[MongoDB] Connected successfully (database: cortexgate)');
         unavailableWarningLogged = false;
         return db;
       } catch (err) {
         try {
-          await nextClient.close();
+          await connectingClient.close();
         } catch (closeError) {
           console.warn(`[MongoDB] Could not close failed connection: ${closeError.message}`);
         }
+        if (client === connectingClient) client = null;
         throw err;
       }
     })().catch(err => {

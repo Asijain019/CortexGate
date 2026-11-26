@@ -166,6 +166,81 @@
     background: rgba(255, 255, 255, 0.2);
     border-radius: 99px;
   }
+
+  .analytics-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+    gap: 1rem;
+  }
+  .chart-panel {
+    min-width: 0;
+    min-height: 310px;
+    padding: 1.25rem;
+  }
+  .chart-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .chart-heading h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: .8rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+  }
+  .chart-heading p {
+    margin: .3rem 0 0;
+    color: var(--text-muted);
+    font-size: .65rem;
+  }
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .9rem;
+    margin: 1rem 0 .2rem 2.5rem;
+    color: var(--text-muted);
+    font-size: .6rem;
+  }
+  .chart-legend span { display: inline-flex; align-items: center; gap: .35rem; }
+  .legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }
+  .legend-dot.hit { background: #20a87a; }
+  .legend-dot.miss { background: #665ce7; }
+  .legend-dot.error { background: #e15d69; }
+  .activity-svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart-grid-line { stroke: var(--card-border); stroke-width: 1; stroke-dasharray: 3 5; }
+  .chart-axis-label { fill: var(--text-muted); font: 10px 'Plus Jakarta Sans', sans-serif; }
+  .chart-empty { display: grid; min-height: 185px; place-items: center; color: var(--text-muted); font-size: .7rem; text-align: center; }
+  .chart-footnote { margin: .15rem 0 0 2.5rem; color: var(--text-muted); font-size: .58rem; }
+  .donut-layout { min-height: 225px; display: flex; align-items: center; justify-content: center; gap: clamp(1rem, 4vw, 2.5rem); padding: .65rem 0; }
+  .donut-svg { width: 165px; max-width: 43%; height: auto; overflow: visible; }
+  .donut-legend { display: grid; min-width: 125px; gap: .75rem; }
+  .donut-legend-row { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: .45rem; color: var(--text-muted); font-size: .62rem; }
+  .donut-legend-row strong { color: var(--text-primary); font-size: .68rem; }
+  .donut-caption { border-top: 1px solid var(--card-border); padding-top: .65rem; color: var(--text-muted); font-size: .58rem; }
+  .chart-bar-list { display: grid; gap: .85rem; padding-top: 1.2rem; }
+  .chart-bar-row { min-width: 0; }
+  .chart-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .35rem; color: var(--text-primary); font-size: .65rem; }
+  .chart-bar-heading span { overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
+  .chart-bar-heading strong { color: var(--text-muted); font-size: .62rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chart-bar-track { height: 7px; overflow: hidden; border-radius: 99px; background: rgba(128, 137, 158, .16); }
+  .chart-bar-fill { height: 100%; min-width: 2px; border-radius: inherit; transition: width .35s ease; }
+  .chart-bar-note { margin-top: .25rem; color: var(--text-muted); font-size: .55rem; }
+  .analytics-note { margin: -.4rem .2rem 0; color: var(--text-muted); font-size: .58rem; }
+  @media (max-width: 900px) {
+    .analytics-grid { grid-template-columns: 1fr; }
+    .chart-panel { min-height: 275px; }
+  }
+  @media (max-width: 540px) {
+    .chart-panel { padding: 1rem; }
+    .activity-svg { height: 190px; }
+    .donut-layout { gap: .6rem; }
+    .donut-svg { width: 135px; }
+    .donut-legend { min-width: 110px; }
+    .chart-legend { margin-left: 0; }
+    .chart-footnote { margin-left: 0; }
+  }
 </style>
 </head>
 <body class="min-h-screen p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
@@ -188,6 +263,7 @@
     <!-- Top Pill Nav Bar -->
     <nav class="hidden lg:flex items-center gap-1 bg-[#171626] p-1.5 rounded-full text-xs font-semibold text-slate-300 shadow-inner">
       <button class="px-4 py-2 rounded-full bg-[#5b50e6] text-white shadow-sm transition">✦ Overview</button>
+      <button onclick="scrollToCharts()" class="px-4 py-2 rounded-full hover:text-white transition">Analytics</button>
       <button onclick="scrollToTester()" class="px-4 py-2 rounded-full hover:text-white transition">Prompt Tester</button>
       <button onclick="filterLogs('cache')" class="px-4 py-2 rounded-full hover:text-white transition">Cache Hits</button>
       <button onclick="filterLogs('failover')" class="px-4 py-2 rounded-full hover:text-white transition">Failovers</button>
@@ -296,6 +372,7 @@
         </div>
       </div>
       <div class="text-[11px] text-[var(--text-muted)] font-medium">List-price estimate; embeddings excluded</div>
+      <div class="text-[11px] text-[var(--text-muted)] font-medium">Active: Groq, OpenRouter, NVIDIA (+5 backups)</div>
     </div>
 
   </div>
@@ -362,7 +439,13 @@
                 <select id="provider-select" class="bg-white/10 backdrop-blur-md border border-white/20 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer">
                   <option value="" class="bg-[#171626] text-white">Auto (Failover Order)</option>
                   <option value="groq" class="bg-[#171626] text-white">Force Groq First</option>
+                  <option value="openrouter" class="bg-[#171626] text-white">Force OpenRouter First</option>
+                  <option value="nvidia" class="bg-[#171626] text-white">Force NVIDIA First</option>
                   <option value="gemini" class="bg-[#171626] text-white">Force Gemini First</option>
+                  <option value="sambanova" class="bg-[#171626] text-white">Force SambaNova First</option>
+                  <option value="mistral" class="bg-[#171626] text-white">Force Mistral First</option>
+                  <option value="huggingface" class="bg-[#171626] text-white">Force HuggingFace First</option>
+                  <option value="github" class="bg-[#171626] text-white">Force GitHub Models First</option>
                 </select>
               </div>
               <button id="send-btn" onclick="sendPrompt()" class="px-6 py-2.5 rounded-xl bg-white text-[#4f46e5] font-extrabold text-xs shadow-md hover:bg-indigo-50 transition transform active:scale-95">
@@ -409,6 +492,44 @@
 
   </div>
 
+  <!-- Live analytics charts, below the prompt tester -->
+  <section id="analytics-section" class="analytics-grid" aria-label="Live gateway analytics">
+    <article class="glass-card rounded-2xl chart-panel">
+      <div class="chart-heading">
+        <div><h3>Request activity</h3><p>Cache hits, provider calls, and errors · last 24 hours</p></div>
+      </div>
+      <div class="chart-legend">
+        <span><i class="legend-dot hit"></i>Cache hits</span>
+        <span><i class="legend-dot miss"></i>Provider calls</span>
+        <span><i class="legend-dot error"></i>Errors</span>
+      </div>
+      <div id="activity-chart"></div>
+      <div class="chart-footnote">Uses up to the latest 200 logged requests.</div>
+    </article>
+
+    <article class="glass-card rounded-2xl chart-panel">
+      <div class="chart-heading">
+        <div><h3>Cache outcomes</h3><p>Cumulative semantic cache lookups</p></div>
+      </div>
+      <div id="cache-chart"></div>
+    </article>
+
+    <article class="glass-card rounded-2xl chart-panel">
+      <div class="chart-heading">
+        <div><h3>Requests by provider</h3><p>Provider distribution from gateway counters</p></div>
+      </div>
+      <div id="provider-chart"></div>
+    </article>
+
+    <article class="glass-card rounded-2xl chart-panel">
+      <div class="chart-heading">
+        <div><h3>Estimated spend by provider</h3><p>Estimated cost from recent request history</p></div>
+      </div>
+      <div id="spend-chart"></div>
+    </article>
+  </section>
+  <p class="analytics-note">Cost values are estimates based on configured prices. Activity and provider spend use up to 200 recent records; cumulative cache counters may include older requests.</p>
+
 <script>
   let rawData = null;
   let activeFilter = 'all';
@@ -443,6 +564,10 @@
     document.getElementById('prompt-input').focus();
   }
 
+  function scrollToCharts() {
+    document.getElementById('analytics-section').scrollIntoView({ behavior: 'smooth' });
+  }
+
   function filterLogs(filter) {
     activeFilter = filter;
     ['all', 'cache', 'failover'].forEach(f => {
@@ -456,6 +581,136 @@
       }
     });
     if (rawData) renderLogs(rawData.recent);
+  }
+
+  function renderActivityChart(recent) {
+    const container = document.getElementById('activity-chart');
+    const now = Date.now();
+    const bucketMs = 2 * 60 * 60 * 1000;
+    const currentBucketStart = Math.floor(now / bucketMs) * bucketMs;
+    const rangeStart = currentBucketStart - 11 * bucketMs;
+    const buckets = Array.from({ length: 12 }, (_, index) => ({
+      time: new Date(rangeStart + index * bucketMs), hits: 0, calls: 0, errors: 0
+    }));
+    (Array.isArray(recent) ? recent : []).forEach(row => {
+      const time = new Date(row.time || row.ts || row.created_at || '');
+      if (Number.isNaN(time.getTime()) || time.getTime() < rangeStart || time.getTime() >= rangeStart + buckets.length * bucketMs) return;
+      const bucket = buckets[Math.floor((time.getTime() - rangeStart) / bucketMs)];
+      const failed = row.status === 'error' || row.provider === 'none' || (typeof row.status === 'number' && row.status >= 400);
+      if (failed) bucket.errors++;
+      else if (row.cache || row.cacheHit || row.provider === 'cache') bucket.hits++;
+      else bucket.calls++;
+    });
+
+    if (!buckets.some(bucket => bucket.hits + bucket.calls + bucket.errors > 0)) {
+      container.innerHTML = '<div class="chart-empty">No requests in the last 24 hours yet.</div>';
+      return;
+    }
+
+    const width = 720, height = 220, left = 42, right = 12, top = 12, bottom = 31;
+    const plotWidth = width - left - right, plotHeight = height - top - bottom;
+    const maxCount = Math.max(1, ...buckets.map(bucket => bucket.hits + bucket.calls + bucket.errors));
+    const maxAxis = Math.max(4, Math.ceil(maxCount / 4) * 4);
+    const slot = plotWidth / buckets.length;
+    const barWidth = Math.min(27, slot * .56);
+    const y = value => top + plotHeight - (value / maxAxis) * plotHeight;
+    const grid = [0, .25, .5, .75, 1].map(fraction => {
+      const value = Math.round(maxAxis * fraction);
+      const yPos = y(value);
+      return `<g><line x1="${left}" x2="${width - right}" y1="${yPos}" y2="${yPos}" class="chart-grid-line"/><text x="${left - 9}" y="${yPos + 3}" text-anchor="end" class="chart-axis-label">${value}</text></g>`;
+    }).join('');
+    const bars = buckets.map((bucket, index) => {
+      const x = left + slot * index + (slot - barWidth) / 2;
+      const values = [
+        { key: 'hits', color: '#20a87a' },
+        { key: 'calls', color: '#665ce7' },
+        { key: 'errors', color: '#e15d69' }
+      ];
+      let accumulated = 0;
+      const segments = values.map(series => {
+        const value = bucket[series.key];
+        if (!value) return '';
+        const segmentTop = y(accumulated + value);
+        const segmentHeight = (value / maxAxis) * plotHeight;
+        accumulated += value;
+        return `<rect x="${x}" y="${segmentTop}" width="${barWidth}" height="${segmentHeight}" rx="3" fill="${series.color}"><title>${bucket.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${value} ${series.key}</title></rect>`;
+      }).join('');
+      const label = index % 2 === 0
+        ? `<text x="${x + barWidth / 2}" y="${height - 7}" text-anchor="middle" class="chart-axis-label">${bucket.time.toLocaleTimeString([], { hour: '2-digit' })}</text>`
+        : '';
+      return segments + label;
+    }).join('');
+    container.innerHTML = `<svg class="activity-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Request activity for the last 24 hours">${grid}${bars}</svg>`;
+  }
+
+  function renderCacheChart(cache) {
+    const container = document.getElementById('cache-chart');
+    const hits = Number(cache.hits) || 0;
+    const misses = Number(cache.misses) || 0;
+    const total = hits + misses;
+    const percent = total ? hits / total : 0;
+    const circumference = 2 * Math.PI * 52;
+    const hitLength = circumference * percent;
+    container.innerHTML = `
+      <div class="donut-layout">
+        <svg class="donut-svg" viewBox="0 0 150 150" role="img" aria-label="${(percent * 100).toFixed(1)} percent cache hit rate">
+          <circle cx="75" cy="75" r="52" fill="none" stroke="#7770e8" stroke-width="16" opacity=".22"/>
+          <circle cx="75" cy="75" r="52" fill="none" stroke="#20a87a" stroke-width="16" stroke-linecap="round" stroke-dasharray="${hitLength} ${circumference}" transform="rotate(-90 75 75)"/>
+          <text x="75" y="71" text-anchor="middle" fill="var(--text-primary)" font-size="20" font-weight="800">${(percent * 100).toFixed(1)}%</text>
+          <text x="75" y="89" text-anchor="middle" fill="var(--text-muted)" font-size="9">hit rate</text>
+        </svg>
+        <div class="donut-legend">
+          <div class="donut-legend-row"><i class="legend-dot hit"></i><span>Cache hits</span><strong>${hits.toLocaleString()}</strong></div>
+          <div class="donut-legend-row"><i class="legend-dot miss"></i><span>Cache misses</span><strong>${misses.toLocaleString()}</strong></div>
+          <div class="donut-caption">${total.toLocaleString()} cache lookups recorded</div>
+        </div>
+      </div>`;
+  }
+
+  function renderBarChart(containerId, items, options = {}) {
+    const container = document.getElementById(containerId);
+    if (!items.length) {
+      container.innerHTML = `<div class="chart-empty">${options.emptyMessage || 'No data available yet.'}</div>`;
+      return;
+    }
+    const maxValue = Math.max(1, ...items.map(item => item.value));
+    const color = options.color || '#665ce7';
+    container.innerHTML = `<div class="chart-bar-list">${items.slice(0, 8).map(item => {
+      const width = item.value > 0 ? Math.max(2, item.value / maxValue * 100) : 0;
+      return `<div class="chart-bar-row">
+        <div class="chart-bar-heading"><span title="${esc(item.label)}">${esc(item.label)}</span><strong>${options.format ? options.format(item.value) : item.value.toLocaleString()}</strong></div>
+        <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${width}%;background:${color}"></div></div>
+        ${item.count ? `<div class="chart-bar-note">${item.count} recent calls</div>` : ''}
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function renderAnalytics(data) {
+    renderActivityChart(data.recent);
+    renderCacheChart(data.cache || {});
+
+    const providerCounts = Object.entries(data.byProvider || {})
+      .filter(([provider]) => provider !== 'cache' && provider !== 'none')
+      .map(([label, value]) => ({ label, value: Number(value) || 0 }))
+      .sort((a, b) => b.value - a.value);
+    renderBarChart('provider-chart', providerCounts, { emptyMessage: 'No provider calls recorded yet.' });
+
+    const spend = new Map();
+    (Array.isArray(data.recent) ? data.recent : []).forEach(row => {
+      if (row.provider === 'cache' || row.provider === 'none' || row.status === 'error') return;
+      const baseCost = Number(row.actualCost ?? row.cost) || 0;
+      const verificationCost = row.actualCost === undefined ? (Number(row.verifyCost) || 0) : 0;
+      const current = spend.get(row.provider || 'unknown') || { label: row.provider || 'unknown', value: 0, count: 0 };
+      current.value += baseCost + verificationCost;
+      current.count++;
+      spend.set(current.label, current);
+    });
+    const spendItems = Array.from(spend.values()).sort((a, b) => b.value - a.value);
+    renderBarChart('spend-chart', spendItems, {
+      color: '#20a87a',
+      format: fmtUsd,
+      emptyMessage: 'No provider calls in the recent request history.'
+    });
   }
 
   async function refreshData() {
@@ -491,6 +746,7 @@
       document.getElementById('status-indicator').className = 'status-indicator status-online-dot w-2 h-2 rounded-full animate-pulse';
 
       renderLogs(data.recent);
+      renderAnalytics(data);
     } catch (e) {
       document.getElementById('status-text').textContent = 'Gateway Disconnected';
       document.getElementById('status-pill').className = 'status-pill status-offline flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold';
@@ -527,8 +783,22 @@
       if (isCache) {
         badgeBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
         provLabel = 'CACHE HIT';
+      } else if (provLabel === 'OPENROUTER' || provLabel === 'OPENAI') {
+        badgeBg = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+      } else if (provLabel === 'NVIDIA') {
+        badgeBg = 'bg-lime-500/20 text-lime-300 border-lime-500/30';
       } else if (provLabel === 'GEMINI') {
         badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+      } else if (provLabel === 'SAMBANOVA') {
+        badgeBg = 'bg-orange-500/20 text-orange-300 border-orange-500/30';
+      } else if (provLabel === 'MISTRAL') {
+        badgeBg = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+      } else if (provLabel === 'HUGGINGFACE') {
+        badgeBg = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+      } else if (provLabel === 'GITHUB') {
+        badgeBg = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+      } else if (provLabel === 'NONE') {
+        badgeBg = 'bg-red-500/20 text-red-300 border-red-500/30';
       }
 
       const simText = isCache && r.similarity ? ` (${r.similarity.toFixed(3)})` : '';
@@ -617,17 +887,28 @@
       });
       const data = await r.json();
 
+      // Handle 202 Queued (rate-limit token bucket empty)
+      if (r.status === 202) {
+        resBox.textContent = '⏳ Request queued (rate limit reached). Try again in a moment.';
+        document.getElementById('inspect-tag').textContent = 'Queued';
+        document.getElementById('inspect-tag').className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30';
+        btn.disabled = false;
+        btn.textContent = 'Send Request →';
+        return;
+      }
+
       if (data.error) throw new Error(data.error.message);
 
       const isCache = data.provider === 'cache';
       const answer = data.choices?.[0]?.message?.content || '';
+      const providerLabel = (data.provider || 'unknown').toUpperCase();
 
-      document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${data.provider}`;
+      document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${data.provider || 'unknown'}`;
       document.getElementById('inspect-tag').className = isCache 
         ? 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
         : 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
 
-      resBox.textContent = `[${isCache ? '⚡ CACHE HIT' : '🤖 PROVIDER: ' + data.provider.toUpperCase()}]\n\n${answer}`;
+      resBox.textContent = `[${isCache ? '⚡ CACHE HIT' : '🤖 PROVIDER: ' + providerLabel}]\n\n${answer}`;
       
       document.getElementById('detail-provider').textContent = (data.provider || 'groq').toUpperCase();
       document.getElementById('detail-latency').textContent = 'Completed';
