@@ -1,949 +1,1200 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CortexGate — AI Gateway & Semantic Cache</title>
-<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+<title>CortexGate Console</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-  
-  :root {
-    --bg-main: #f3f2f8;
-    --card-bg: #ffffff;
-    --card-border: #e9e8f2;
-    --text-primary: #141324;
-    --text-muted: #64748b;
+/* ---------- Tokens ---------- */
+:root {
+  color-scheme: light;
+  --bg: #f6f6f4; --surface: #ffffff; --surface-2: #f2f2ef; --chart: #fcfcfb;
+  --border: rgba(11,11,11,.10); --border-strong: rgba(11,11,11,.18);
+  --text: #0b0b0b; --text-2: #52514e; --muted: #6f6d68;
+  --grid: #e1e0d9; --axis: #c3c2b7;
+  --accent: #2a78d6; --accent-ink: #ffffff;
+  --s-provider: #2a78d6; --s-cache: #1baf7a; --s-violet: #6250d6; --s-orange: #eb6834;
+  --good: #0a7d0a; --good-bg: rgba(12,163,12,.12);
+  --warn: #8a5a00; --warn-bg: rgba(250,178,25,.20);
+  --serious: #b0471d; --serious-bg: rgba(236,131,90,.18);
+  --crit: #c23232; --crit-bg: rgba(208,59,59,.12);
+  --info: #1c5cab; --info-bg: rgba(42,120,214,.12);
+  --neutral-bg: rgba(11,11,11,.06);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d; --surface: #161616; --surface-2: #1d1d1c; --chart: #1a1a19;
+    --border: rgba(255,255,255,.09); --border-strong: rgba(255,255,255,.16);
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #94928b;
+    --grid: #2c2c2a; --axis: #383835;
+    --accent: #3987e5; --accent-ink: #ffffff;
+    --s-provider: #3987e5; --s-cache: #199e70; --s-violet: #9085e9; --s-orange: #d95926;
+    --good: #3fc43f; --good-bg: rgba(12,163,12,.16);
+    --warn: #fab219; --warn-bg: rgba(250,178,25,.14);
+    --serious: #ec835a; --serious-bg: rgba(236,131,90,.15);
+    --crit: #ef6b6b; --crit-bg: rgba(208,59,59,.18);
+    --info: #6da7ec; --info-bg: rgba(57,135,229,.16);
+    --neutral-bg: rgba(255,255,255,.07);
+    --shadow: none;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d; --surface: #161616; --surface-2: #1d1d1c; --chart: #1a1a19;
+  --border: rgba(255,255,255,.09); --border-strong: rgba(255,255,255,.16);
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #94928b;
+  --grid: #2c2c2a; --axis: #383835;
+  --accent: #3987e5; --accent-ink: #ffffff;
+  --s-provider: #3987e5; --s-cache: #199e70; --s-violet: #9085e9; --s-orange: #d95926;
+  --good: #3fc43f; --good-bg: rgba(12,163,12,.16);
+  --warn: #fab219; --warn-bg: rgba(250,178,25,.14);
+  --serious: #ec835a; --serious-bg: rgba(236,131,90,.15);
+  --crit: #ef6b6b; --crit-bg: rgba(208,59,59,.18);
+  --info: #6da7ec; --info-bg: rgba(57,135,229,.16);
+  --neutral-bg: rgba(255,255,255,.07);
+  --shadow: none;
+}
 
-  .dark {
-    --bg-main: #0b0b14;
-    --card-bg: #151428;
-    --card-border: #272545;
-    --text-primary: #f1f5f9;
-    --text-muted: #94a3b8;
-  }
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 16px 48px; }
 
-  .status-pill {
-    border: 1px solid;
-  }
-  .status-pill.status-online {
-    background-color: #dcfce7;
-    border-color: #86efac;
-    color: #166534;
-  }
-  .status-pill.status-offline {
-    background-color: #fee2e2;
-    border-color: #fca5a5;
-    color: #991b1b;
-  }
-  .status-indicator.status-online-dot {
-    background-color: #16a34a;
-  }
-  .status-indicator.status-offline-dot {
-    background-color: #dc2626;
-  }
-  .reset-button {
-    background-color: #b91c1c;
-    border: 1px solid #991b1b;
-    color: #ffffff;
-  }
-  .reset-button:hover {
-    background-color: #991b1b;
-  }
+/* ---------- Header ---------- */
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+}
+.top-inner { max-width: 1440px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.logo { width: 26px; height: 26px; border-radius: 7px; background: var(--text); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+.brand h1 { font-size: 15px; margin: 0; letter-spacing: -.01em; }
+.brand span { color: var(--muted); font-size: 12px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.pill b { color: var(--text); font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.good { background: var(--good); } .dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); }
+.dot.pulse { animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.btn { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; font-size: 12px; font-weight: 500; }
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, .seg button:focus-visible, tr:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--crit); }
+.btn:disabled { opacity: .55; cursor: default; }
 
-  .live-stats-badge {
-    background-color: #e0e7ff;
-    border: 1px solid #c7d2fe;
-    color: #4338ca;
-  }
-  .metric-icon {
-    border: 1px solid transparent;
-  }
-  .metric-icon-requests {
-    background-color: #e0e7ff;
-    border-color: #c7d2fe;
-    color: #4338ca;
-  }
-  .metric-icon-cache {
-    background-color: #ede9fe;
-    border-color: #ddd6fe;
-    color: #6d28d9;
-  }
-  .metric-icon-saved {
-    background-color: #d1fae5;
-    border-color: #a7f3d0;
-    color: #047857;
-  }
-  .metric-icon-spend {
-    background-color: #fef3c7;
-    border-color: #fde68a;
-    color: #b45309;
-  }
+/* ---------- Layout ---------- */
+.banner { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; display: none; }
+.banner.show { display: block; }
+.banner.crit { border-color: var(--crit); color: var(--crit); background: var(--crit-bg); }
+.banner.good { border-color: var(--good); color: var(--good); background: var(--good-bg); }
+.section-title { display: flex; align-items: baseline; gap: 10px; margin: 28px 0 10px; }
+.section-title h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.section-title p { margin: 0; color: var(--muted); font-size: 12px; }
+.grid { display: grid; gap: 12px; }
+.kpis { grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); margin-top: 16px; }
+.cols-2 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.cols-2e { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.providers { grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); }
+@media (max-width: 960px) { .cols-2, .cols-2e { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; box-shadow: var(--shadow); min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 
-  .dark .status-pill.status-online {
-    background-color: #052e16;
-    border-color: #166534;
-    color: #86efac;
-  }
-  .dark .status-pill.status-offline {
-    background-color: #450a0a;
-    border-color: #991b1b;
-    color: #fecaca;
-  }
-  .dark .status-indicator.status-online-dot {
-    background-color: #34d399;
-  }
-  .dark .status-indicator.status-offline-dot {
-    background-color: #f87171;
-  }
-  .dark .reset-button {
-    background-color: #7f1d1d;
-    border-color: #b91c1c;
-    color: #fee2e2;
-  }
-  .dark .reset-button:hover {
-    background-color: #991b1b;
-    color: #ffffff;
-  }
-  .dark .live-stats-badge {
-    background-color: #312e81;
-    border-color: #4338ca;
-    color: #c7d2fe;
-  }
-  .dark .metric-icon-requests {
-    background-color: #312e81;
-    border-color: #4338ca;
-    color: #c7d2fe;
-  }
-  .dark .metric-icon-cache {
-    background-color: #4c1d95;
-    border-color: #6d28d9;
-    color: #ddd6fe;
-  }
-  .dark .metric-icon-saved {
-    background-color: #064e3b;
-    border-color: #047857;
-    color: #a7f3d0;
-  }
-  .dark .metric-icon-spend {
-    background-color: #78350f;
-    border-color: #b45309;
-    color: #fde68a;
-  }
+/* ---------- KPI ---------- */
+.kpi .label { color: var(--muted); font-size: 12px; }
+.kpi .value { font-size: 24px; font-weight: 600; letter-spacing: -.02em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.kpi .hint { color: var(--muted); font-size: 11.5px; min-height: 16px; }
 
-  body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-main);
-    color: var(--text-primary);
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-  .glass-card {
-    background-color: var(--card-bg);
-    border: 1px solid var(--card-border);
-    box-shadow: 0 10px 30px -5px rgba(91, 80, 230, 0.05);
-  }
-  .dark-panel {
-    background-color: #171626;
-    color: #ffffff;
-  }
-  .purple-card {
-    background: linear-gradient(135deg, #5b50e6 0%, #4f46e5 100%);
-  }
-  .purple-subcard {
-    background-color: #26253d;
-    border: 1px solid #363456;
-  }
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 99px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 99px;
-  }
+/* ---------- Badges ---------- */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: var(--neutral-bg); color: var(--text-2); white-space: nowrap; }
+.badge.good { background: var(--good-bg); color: var(--good); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.serious { background: var(--serious-bg); color: var(--serious); }
+.badge.crit { background: var(--crit-bg); color: var(--crit); }
+.badge.info { background: var(--info-bg); color: var(--info); }
+.badge.outline { background: transparent; border: 1px solid var(--border-strong); }
 
-  .analytics-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
-    gap: 1rem;
-  }
-  .chart-panel {
-    min-width: 0;
-    min-height: 310px;
-    padding: 1.25rem;
-  }
-  .chart-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-  .chart-heading h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: .8rem;
-    font-weight: 800;
-    letter-spacing: .02em;
-  }
-  .chart-heading p {
-    margin: .3rem 0 0;
-    color: var(--text-muted);
-    font-size: .65rem;
-  }
-  .chart-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .9rem;
-    margin: 1rem 0 .2rem 2.5rem;
-    color: var(--text-muted);
-    font-size: .6rem;
-  }
-  .chart-legend span { display: inline-flex; align-items: center; gap: .35rem; }
-  .legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }
-  .legend-dot.hit { background: #20a87a; }
-  .legend-dot.miss { background: #665ce7; }
-  .legend-dot.error { background: #e15d69; }
-  .activity-svg { display: block; width: 100%; height: 220px; overflow: visible; }
-  .chart-grid-line { stroke: var(--card-border); stroke-width: 1; stroke-dasharray: 3 5; }
-  .chart-axis-label { fill: var(--text-muted); font: 10px 'Plus Jakarta Sans', sans-serif; }
-  .chart-empty { display: grid; min-height: 185px; place-items: center; color: var(--text-muted); font-size: .7rem; text-align: center; }
-  .chart-footnote { margin: .15rem 0 0 2.5rem; color: var(--text-muted); font-size: .58rem; }
-  .donut-layout { min-height: 225px; display: flex; align-items: center; justify-content: center; gap: clamp(1rem, 4vw, 2.5rem); padding: .65rem 0; }
-  .donut-svg { width: 165px; max-width: 43%; height: auto; overflow: visible; }
-  .donut-legend { display: grid; min-width: 125px; gap: .75rem; }
-  .donut-legend-row { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: .45rem; color: var(--text-muted); font-size: .62rem; }
-  .donut-legend-row strong { color: var(--text-primary); font-size: .68rem; }
-  .donut-caption { border-top: 1px solid var(--card-border); padding-top: .65rem; color: var(--text-muted); font-size: .58rem; }
-  .chart-bar-list { display: grid; gap: .85rem; padding-top: 1.2rem; }
-  .chart-bar-row { min-width: 0; }
-  .chart-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .35rem; color: var(--text-primary); font-size: .65rem; }
-  .chart-bar-heading span { overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
-  .chart-bar-heading strong { color: var(--text-muted); font-size: .62rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .chart-bar-track { height: 7px; overflow: hidden; border-radius: 99px; background: rgba(128, 137, 158, .16); }
-  .chart-bar-fill { height: 100%; min-width: 2px; border-radius: inherit; transition: width .35s ease; }
-  .chart-bar-note { margin-top: .25rem; color: var(--text-muted); font-size: .55rem; }
-  .analytics-note { margin: -.4rem .2rem 0; color: var(--text-muted); font-size: .58rem; }
-  @media (max-width: 900px) {
-    .analytics-grid { grid-template-columns: 1fr; }
-    .chart-panel { min-height: 275px; }
-  }
-  @media (max-width: 540px) {
-    .chart-panel { padding: 1rem; }
-    .activity-svg { height: 190px; }
-    .donut-layout { gap: .6rem; }
-    .donut-svg { width: 135px; }
-    .donut-legend { min-width: 110px; }
-    .chart-legend { margin-left: 0; }
-    .chart-footnote { margin-left: 0; }
-  }
+/* ---------- Provider cards ---------- */
+.pcard { display: flex; flex-direction: column; gap: 10px; }
+.pcard.dim { opacity: .62; }
+.pname { font-weight: 600; font-size: 14px; text-transform: capitalize; }
+.models { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 11.5px; }
+.models dt { color: var(--muted); text-transform: capitalize; }
+.models dd { margin: 0; font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat .k { color: var(--muted); font-size: 11px; }
+.stat .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 99px; background: var(--neutral-bg); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 99px; background: var(--good); }
+.bar > i.warn { background: var(--warn); } .bar > i.crit { background: var(--crit); }
+.lasterr { font-size: 11.5px; color: var(--crit); background: var(--crit-bg); border-radius: 6px; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+
+/* ---------- Distribution bars ---------- */
+.hbars { display: grid; gap: 8px; }
+.hbar { display: grid; grid-template-columns: 90px 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
+.hbar .name { text-transform: capitalize; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .track { height: 10px; border-radius: 3px; background: var(--neutral-bg); overflow: hidden; }
+.hbar .track i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.explain { font-size: 12px; color: var(--text-2); border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+.explain ol { margin: 6px 0 0; padding-left: 18px; }
+.explain li { margin: 2px 0; }
+
+/* ---------- Table / log ---------- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 0 10px; height: 28px; cursor: pointer; font-size: 12px; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
+select { height: 30px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); padding: 0 8px; font-size: 12px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; font-weight: 500; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tbody tr.row { cursor: pointer; }
+tbody tr.row:hover { background: var(--surface-2); }
+tbody tr.row.err td:first-child { box-shadow: inset 2px 0 0 var(--crit); }
+td.prompt { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.right, th.right { text-align: right; }
+.chain { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border-strong); font-size: 11px; white-space: nowrap; }
+.chip.ok { border-color: color-mix(in srgb, var(--good) 55%, transparent); color: var(--good); }
+.chip.fail { border-color: color-mix(in srgb, var(--crit) 50%, transparent); color: var(--crit); }
+.chip.rl { border-color: color-mix(in srgb, var(--warn) 60%, transparent); color: var(--warn); }
+.chip.skip { color: var(--muted); border-style: dashed; }
+.arrow { color: var(--muted); font-size: 11px; }
+tr.detail td { background: var(--surface-2); padding: 12px 14px; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; margin-bottom: 10px; }
+.kv .k { color: var(--muted); font-size: 11px; } .kv .v { word-break: break-word; }
+.attempts { width: 100%; font-size: 11.5px; }
+.attempts td, .attempts th { padding: 5px 8px; background: transparent; }
+.empty { padding: 28px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ---------- Charts ---------- */
+.chart-svg { display: block; width: 100%; height: auto; }
+.chart-svg text { fill: var(--muted); font-size: 10px; font-family: system-ui, sans-serif; }
+.chart-svg .gl { stroke: var(--grid); stroke-width: 1; }
+.chart-svg .base { stroke: var(--axis); stroke-width: 1; }
+.chart-svg .hit { fill: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--text-2); margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tooltip { position: fixed; pointer-events: none; z-index: 50; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 9px; font-size: 11.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); display: none; max-width: 260px; }
+.tooltip .t { font-weight: 600; margin-bottom: 2px; }
+
+/* ---------- Cache panel ---------- */
+.funnel { display: grid; gap: 6px; }
+.frow { display: grid; grid-template-columns: 110px 1fr 56px; align-items: center; gap: 10px; font-size: 12px; }
+.frow .track { height: 18px; background: var(--neutral-bg); border-radius: 3px; overflow: hidden; }
+.frow .track i { display: block; height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
+.kvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px 14px; margin-top: 14px; }
+.kvgrid .k { color: var(--muted); font-size: 11px; } .kvgrid .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.costtable { width: 100%; margin-top: 14px; font-size: 12px; }
+.costtable td { padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.costtable tr.total td { font-weight: 600; border-bottom: 0; }
+.note { font-size: 11.5px; color: var(--muted); margin: 10px 0 0; }
+
+/* ---------- Playground ---------- */
+textarea { width: 100%; min-height: 96px; resize: vertical; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--chart); padding: 10px; font-size: 13px; }
+.pg-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+.pg-controls label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.pg-out { margin-top: 12px; }
+.answer { white-space: pre-wrap; word-break: break-word; background: var(--chart); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 13px; max-height: 380px; overflow: auto; }
+.answer.err { color: var(--crit); border-color: var(--crit); background: var(--crit-bg); }
+.kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; color: var(--muted); }
 </style>
 </head>
-<body class="min-h-screen p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
-
-  <!-- Header Navigation -->
-  <header class="flex flex-col md:flex-row items-center justify-between gap-4 glass-card rounded-2xl p-4 shadow-sm transition-all duration-300">
-    <!-- Brand Logo -->
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl purple-card flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/20">
-        ⚡
-      </div>
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="font-extrabold text-lg tracking-tight text-[var(--text-primary)]">CORTEXGATE</h1>
-        </div>
-        <p class="text-xs text-[var(--text-muted)] font-medium">Smart LLM Gateway, Semantic Caching & Failover</p>
-      </div>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">C</div>
+      <div><h1>CortexGate</h1><span>LLM gateway console</span></div>
     </div>
-
-    <!-- Top Pill Nav Bar -->
-    <nav class="hidden lg:flex items-center gap-1 bg-[#171626] p-1.5 rounded-full text-xs font-semibold text-slate-300 shadow-inner">
-      <button class="px-4 py-2 rounded-full bg-[#5b50e6] text-white shadow-sm transition">✦ Overview</button>
-      <button onclick="scrollToCharts()" class="px-4 py-2 rounded-full hover:text-white transition">Analytics</button>
-      <button onclick="scrollToTester()" class="px-4 py-2 rounded-full hover:text-white transition">Prompt Tester</button>
-      <button onclick="filterLogs('cache')" class="px-4 py-2 rounded-full hover:text-white transition">Cache Hits</button>
-      <button onclick="filterLogs('failover')" class="px-4 py-2 rounded-full hover:text-white transition">Failovers</button>
-      <button onclick="filterLogs('all')" class="px-4 py-2 rounded-full hover:text-white transition">Live Logs</button>
-    </nav>
-
-    <!-- Controls / System Status / Light & Dark Mode Toggle -->
-    <div class="flex items-center gap-3">
-      <div id="status-pill" class="status-pill status-online flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold">
-        <span id="status-indicator" class="status-indicator status-online-dot w-2 h-2 rounded-full animate-pulse"></span>
-        <span id="status-text">Gateway Online</span>
-      </div>
-      <!-- Theme Toggle Button -->
-      <button id="theme-btn" onclick="toggleTheme()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition font-bold text-xs flex items-center gap-1.5" title="Toggle Light/Dark Mode">
-        <span id="theme-icon">🌙</span>
-      </button>
-
-      <button onclick="refreshData()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition" title="Refresh Now">
-        🔄
-      </button>
-      <button onclick="resetDemoData()" class="reset-button px-3 py-2 rounded-xl text-xs font-bold transition" title="Clear MongoDB request history and reset demo cache">
-        Reset demo data
-      </button>
+    <div class="pills" aria-live="polite">
+      <span class="pill" id="pill-conn" title="Live metrics connection"><i class="dot"></i><span>Connecting…</span></span>
+      <span class="pill" id="pill-policy" title="Active routing policy">Policy <b>—</b></span>
+      <span class="pill" id="pill-redis" title="Redis (rate limiting / queue)"><i class="dot"></i>Redis <b>—</b></span>
+      <span class="pill" id="pill-mongo" title="MongoDB request history"><i class="dot"></i>Mongo <b>—</b></span>
     </div>
-  </header>
-
-  <!-- Title & Action Section -->
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
-    <div>
-      <div class="flex items-center gap-3">
-        <h2 class="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">Gateway Dashboard</h2>
-        <span id="live-badge" class="live-stats-badge text-xs px-2.5 py-1 rounded-full font-bold">Live Stats</span>
-      </div>
-      <p class="text-xs text-[var(--text-muted)] mt-1">Manage and track prompt cache hits, cost savings, and provider failovers in real time.</p>
-    </div>
-    <div class="flex items-center gap-3">
-      <button onclick="scrollToTester()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl purple-card text-white text-xs font-bold shadow-lg shadow-indigo-500/25 hover:opacity-95 transition">
-        <span>+ Test Gateway Prompt</span>
-      </button>
-    </div>
+    <button class="btn" id="btn-theme" type="button" aria-label="Toggle theme">Light</button>
+    <button class="btn danger" id="btn-reset" type="button" title="Clear cache, stats and MongoDB history">Reset</button>
   </div>
+</header>
 
-  <!-- Top Metric Cards Row (4 Cards) -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    
-    <!-- Card 1: Total Requests -->
-    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Total Requests</span>
-        <span class="metric-icon metric-icon-requests w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">📊</span>
-      </div>
-      <div>
-        <div id="metric-requests" class="text-3xl font-extrabold text-[var(--text-primary)]">0</div>
-        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
-          <span id="metric-split" class="font-medium">0 hits / 0 misses</span>
-        </div>
-      </div>
-      <!-- Mini Visual Bar -->
-      <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-        <div id="bar-hits" class="h-full bg-[#5b50e6] transition-all duration-500" style="width: 0%"></div>
-        <div id="bar-misses" class="h-full bg-slate-200 dark:bg-slate-700 transition-all duration-500" style="width: 100%"></div>
-      </div>
+<main class="wrap">
+  <div class="banner" id="banner" role="status"></div>
+
+  <section class="grid kpis" id="kpis" aria-label="Key metrics"></section>
+
+  <div class="section-title"><h2>Providers</h2><p id="prov-sub">Health, latency and capacity per upstream</p></div>
+  <section class="grid providers" id="providers"></section>
+
+  <div class="section-title"><h2>Traffic</h2><p>Recent request window and routing decisions</p></div>
+  <section class="grid cols-2">
+    <div class="card">
+      <div class="card-head"><div><h3>Requests over time</h3><p class="sub" id="ts-sub">From recent request log</p></div></div>
+      <div class="legend" id="ts-legend"></div>
+      <div id="chart-ts"></div>
     </div>
-
-    <!-- Card 2: Cache Hit Rate -->
-    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Cache Hit Rate</span>
-        <span class="metric-icon metric-icon-cache w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">⚡</span>
-      </div>
-      <div>
-        <div id="metric-hitrate" class="text-3xl font-extrabold text-[#5b50e6]">0%</div>
-        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
-          <span id="metric-entries" class="font-semibold text-[var(--text-primary)]">0 cached entries</span>
-        </div>
-      </div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">Threshold: <span id="metric-threshold" class="font-bold text-[var(--text-primary)]">0.92</span></div>
+    <div class="card">
+      <h3>Smart routing</h3>
+      <p class="sub">Policy <b id="rt-policy">—</b> · how prompts were classified</p>
+      <div id="routing"></div>
     </div>
-
-    <!-- Card 3: Tokens & Cost Saved -->
-    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Estimated Cost Avoided</span>
-        <span class="metric-icon metric-icon-saved w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">💰</span>
-      </div>
-      <div>
-        <div id="metric-saved" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">$0.00</div>
-        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
-          <span id="metric-tokens" class="font-semibold text-emerald-700 dark:text-emerald-400">0 tokens avoided</span>
-        </div>
-        <div id="metric-net-saved" class="mt-1 text-xs font-medium text-[var(--text-muted)]">After verification: $0.00</div>
-      </div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">Gross list-price estimate; net excludes embedding cost</div>
-    </div>
-
-    <!-- Card 4: Total Spend & Failovers -->
-    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Estimated API Cost</span>
-        <span class="metric-icon metric-icon-spend w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm">🛡️</span>
-      </div>
-      <div>
-        <div id="metric-spent" class="text-3xl font-extrabold text-[var(--text-primary)]">$0.00</div>
-        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
-          <span id="metric-failovers" class="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">0 failovers</span>
-        </div>
-      </div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">List-price estimate; embeddings excluded</div>
-      <div class="text-[11px] text-[var(--text-muted)] font-medium">Active: Groq, OpenRouter, NVIDIA (+5 backups)</div>
-    </div>
-
-  </div>
-
-  <!-- Bottom Dark Contrast Container (Request Feed & Interactive Inspector) -->
-  <div class="dark-panel rounded-[28px] p-5 sm:p-7 shadow-2xl space-y-6 border border-slate-800">
-    
-    <!-- Dark Container Tabs Bar -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-      <div class="flex items-center gap-2">
-        <button id="tab-all" onclick="filterLogs('all')" class="px-4 py-2 rounded-xl bg-[#5b50e6] text-white text-xs font-bold shadow-md transition">All Requests</button>
-        <button id="tab-cache" onclick="filterLogs('cache')" class="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Cache Hits</button>
-        <button id="tab-failover" onclick="filterLogs('failover')" class="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Failovers</button>
-      </div>
-      <div class="text-xs text-slate-400 font-medium flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-        <span>Polling <code class="text-indigo-300 bg-slate-800 px-1.5 py-0.5 rounded">/v1/chat/live</code> every 2s</span>
-      </div>
-    </div>
-
-    <!-- Grid Layout: Left Feed vs Right Inspector -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
-      <!-- Left List (5 cols on lg) -->
-      <div class="lg:col-span-5 space-y-3">
-        <div class="flex items-center justify-between px-1">
-          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Recent Request Log</h3>
-          <span id="log-count" class="text-xs text-slate-500 font-semibold">0 items</span>
-        </div>
-        
-        <div id="log-list" class="space-y-2.5 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
-          <!-- Request Rows injected dynamically -->
-          <div class="p-4 rounded-2xl purple-subcard text-slate-400 text-xs text-center">
-            No requests logged yet. Send a prompt on the right to start!
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Column: Interactive Prompt Tester & Detail View (7 cols on lg) -->
-      <div id="tester-container" class="lg:col-span-7 space-y-5">
-        
-        <!-- Interactive Prompt Tester Card -->
-        <div class="purple-card rounded-2xl p-6 shadow-xl text-white space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="font-extrabold text-base flex items-center gap-2">
-              <span>✦ Interactive Gateway Tester</span>
-            </h3>
-            <span class="text-[11px] bg-white/20 text-white font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm">Live Test</span>
-          </div>
-
-          <!-- Prompt Form Controls -->
-          <div class="space-y-3">
-            <div>
-              <input type="text" id="prompt-input" placeholder="Type a prompt (e.g., What is the capital of France?)" 
-                class="w-full text-sm px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white placeholder-indigo-200 focus:outline-none focus:ring-2 focus:ring-white/50 transition">
-            </div>
-            
-            <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div class="flex items-center gap-3">
-                <label class="flex items-center gap-2 cursor-pointer text-indigo-100 font-medium">
-                  <input type="checkbox" id="bypass-cache" class="rounded accent-indigo-400 w-4 h-4 cursor-pointer">
-                  <span>Bypass cache</span>
-                </label>
-                <select id="provider-select" class="bg-white/10 backdrop-blur-md border border-white/20 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer">
-                  <option value="" class="bg-[#171626] text-white">Auto (Failover Order)</option>
-                  <option value="groq" class="bg-[#171626] text-white">Force Groq First</option>
-                  <option value="openrouter" class="bg-[#171626] text-white">Force OpenRouter First</option>
-                  <option value="nvidia" class="bg-[#171626] text-white">Force NVIDIA First</option>
-                  <option value="gemini" class="bg-[#171626] text-white">Force Gemini First</option>
-                  <option value="sambanova" class="bg-[#171626] text-white">Force SambaNova First</option>
-                  <option value="mistral" class="bg-[#171626] text-white">Force Mistral First</option>
-                  <option value="huggingface" class="bg-[#171626] text-white">Force HuggingFace First</option>
-                  <option value="github" class="bg-[#171626] text-white">Force GitHub Models First</option>
-                </select>
-              </div>
-              <button id="send-btn" onclick="sendPrompt()" class="px-6 py-2.5 rounded-xl bg-white text-[#4f46e5] font-extrabold text-xs shadow-md hover:bg-indigo-50 transition transform active:scale-95">
-                Send Request ➔
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Request Details & Response Inspector Card -->
-        <div class="purple-subcard rounded-2xl p-5 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
-            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-              <span>Response & Inspection Details</span>
-            </h4>
-            <span id="inspect-tag" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400">Idle</span>
-          </div>
-
-          <div id="response-box" class="text-xs text-slate-300 min-h-[90px] font-mono bg-[#171626] p-4 rounded-xl border border-slate-800 whitespace-pre-wrap leading-relaxed">
-            Click any request from the left list or send a new prompt to inspect model response, provider headers, latency, and cost breakdown.
-          </div>
-
-          <!-- Detail Metrics Footer -->
-          <div class="grid grid-cols-3 gap-3 pt-1">
-            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
-              <div class="text-[10px] font-bold text-slate-400 uppercase">Provider / Route</div>
-              <div id="detail-provider" class="text-xs font-extrabold text-indigo-400 mt-0.5">-</div>
-            </div>
-            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
-              <div class="text-[10px] font-bold text-slate-400 uppercase">Latency</div>
-              <div id="detail-latency" class="text-xs font-extrabold text-emerald-400 mt-0.5">-</div>
-            </div>
-            <div class="bg-[#171626] p-3 rounded-xl border border-slate-800/80">
-              <div class="text-[10px] font-bold text-slate-400 uppercase">Cost / Saved</div>
-              <div id="detail-cost" class="text-xs font-extrabold text-indigo-300 mt-0.5">-</div>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </div>
-
-  <!-- Live analytics charts, below the prompt tester -->
-  <section id="analytics-section" class="analytics-grid" aria-label="Live gateway analytics">
-    <article class="glass-card rounded-2xl chart-panel">
-      <div class="chart-heading">
-        <div><h3>Request activity</h3><p>Cache hits, provider calls, and errors · last 24 hours</p></div>
-      </div>
-      <div class="chart-legend">
-        <span><i class="legend-dot hit"></i>Cache hits</span>
-        <span><i class="legend-dot miss"></i>Provider calls</span>
-        <span><i class="legend-dot error"></i>Errors</span>
-      </div>
-      <div id="activity-chart"></div>
-      <div class="chart-footnote">Uses up to the latest 200 logged requests.</div>
-    </article>
-
-    <article class="glass-card rounded-2xl chart-panel">
-      <div class="chart-heading">
-        <div><h3>Cache outcomes</h3><p>Cumulative semantic cache lookups</p></div>
-      </div>
-      <div id="cache-chart"></div>
-    </article>
-
-    <article class="glass-card rounded-2xl chart-panel">
-      <div class="chart-heading">
-        <div><h3>Requests by provider</h3><p>Provider distribution from gateway counters</p></div>
-      </div>
-      <div id="provider-chart"></div>
-    </article>
-
-    <article class="glass-card rounded-2xl chart-panel">
-      <div class="chart-heading">
-        <div><h3>Estimated spend by provider</h3><p>Estimated cost from recent request history</p></div>
-      </div>
-      <div id="spend-chart"></div>
-    </article>
   </section>
-  <p class="analytics-note">Cost values are estimates based on configured prices. Activity and provider spend use up to 200 recent records; cumulative cache counters may include older requests.</p>
+
+  <section class="grid cols-2e" style="margin-top:12px">
+    <div class="card">
+      <h3>Latency by provider</h3>
+      <p class="sub">Average with p95 marker, ms</p>
+      <div id="chart-lat"></div>
+    </div>
+    <div class="card" id="cache-card">
+      <h3>Semantic cache</h3>
+      <p class="sub">Lookup funnel, verification and economics</p>
+      <div id="cache"></div>
+    </div>
+  </section>
+
+  <div class="section-title"><h2>Request log</h2><p>Failover chain per request · click a row for details</p></div>
+  <section class="card">
+    <div class="toolbar">
+      <div class="seg" id="log-filter" role="group" aria-label="Filter requests">
+        <button type="button" data-f="all" aria-pressed="true">All</button>
+        <button type="button" data-f="cache" aria-pressed="false">Cache hits</button>
+        <button type="button" data-f="failover" aria-pressed="false">Failovers</button>
+        <button type="button" data-f="error" aria-pressed="false">Errors</button>
+      </div>
+      <select id="log-provider" aria-label="Filter by provider"><option value="">All providers</option></select>
+      <span class="muted" id="log-count" style="margin-left:auto"></span>
+    </div>
+    <div class="table-wrap" id="log"></div>
+  </section>
+
+  <div class="section-title"><h2>Playground</h2><p>Send a prompt through the gateway <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></p></div>
+  <section class="card" id="playground">
+    <textarea id="pg-prompt" aria-label="Prompt" placeholder="Ask something, e.g. What is the capital of France?"></textarea>
+    <div class="pg-controls">
+      <label>Policy
+        <select id="pg-policy">
+          <option value="">Default (server)</option>
+          <option value="cost">Cost</option>
+          <option value="balanced">Balanced</option>
+          <option value="quality">Quality</option>
+        </select>
+      </label>
+      <label>Provider
+        <select id="pg-provider"><option value="">Auto (smart routing)</option></select>
+      </label>
+      <label><input type="checkbox" id="pg-bypass"> Bypass cache</label>
+      <button class="btn primary" id="pg-send" type="button" style="margin-left:auto">Send request</button>
+    </div>
+    <div class="pg-out" id="pg-out"></div>
+  </section>
+</main>
+<div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script>
-  let rawData = null;
-  let activeFilter = 'all';
+'use strict';
+/* =========================================================
+   Utilities
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const SVGNS = 'http://www.w3.org/2000/svg';
 
-  // --- Light / Dark Mode Toggle Logic ---
-  function applyTheme(theme) {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.getElementById('theme-icon').textContent = '☀️';
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.getElementById('theme-icon').textContent = '🌙';
-    }
+function setAttrs(el, attrs) {
+  if (!attrs) return;
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'text') el.textContent = String(v);
+    else el.setAttribute(k, v === true ? '' : String(v));
   }
-
-  function toggleTheme() {
-    const isDark = document.documentElement.classList.contains('dark');
-    const newTheme = isDark ? 'light' : 'dark';
-    localStorage.setItem('cortex-theme', newTheme);
-    applyTheme(newTheme);
+}
+function append(el, kids) {
+  for (const kid of [kids].flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false || kid === '') continue;
+    el.appendChild(typeof kid === 'object' ? kid : document.createTextNode(String(kid)));
   }
+}
+/** Build an HTML element. Strings become text nodes, never markup. */
+function h(tag, attrs, ...kids) { const el = document.createElement(tag); setAttrs(el, attrs); append(el, kids); return el; }
+/** Build an SVG element. */
+function s(tag, attrs, ...kids) { const el = document.createElementNS(SVGNS, tag); setAttrs(el, attrs); append(el, kids); return el; }
+function mount(id, ...nodes) { const el = $(id); if (!el) return; el.replaceChildren(); append(el, nodes); }
 
-  // Load saved theme or default to light
-  const savedTheme = localStorage.getItem('cortex-theme') || 'light';
-  applyTheme(savedTheme);
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+const num = v => (isNum(v) ? v : Number(v) || 0);
+const DASH = '—';
+function fmtInt(v) { return isNum(v) ? Math.round(v).toLocaleString() : DASH; }
+function fmtPct(v, d = 1) { return isNum(v) ? (v * 100).toFixed(d) + '%' : DASH; }
+function fmtMs(v) {
+  if (!isNum(v)) return DASH;
+  return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2) + 's' : Math.round(v) + 'ms';
+}
+function fmtUsd(v) {
+  if (!isNum(v)) return DASH;
+  const a = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (a === 0) return '$0.00';
+  if (a >= 1) return sign + '$' + a.toFixed(2);
+  if (a >= 0.01) return sign + '$' + a.toFixed(4);
+  return sign + '$' + a.toFixed(6);
+}
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? DASH : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtAgo(iso) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.round(sec / 60) + 'm ago';
+  if (sec < 86400) return Math.round(sec / 3600) + 'h ago';
+  return Math.round(sec / 86400) + 'd ago';
+}
+function truncate(str, n) { str = String(str ?? ''); return str.length > n ? str.slice(0, n - 1) + '…' : str; }
+function percentile(arr, p) {
+  if (!arr.length) return null;
+  const a = [...arr].sort((x, y) => x - y);
+  return a[Math.min(a.length - 1, Math.ceil(p * a.length) - 1)];
+}
+function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null; }
+function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch { return null; } return null; }
 
-  const fmtUsd = n => '$' + (n || 0).toFixed(6);
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* =========================================================
+   Theme
+   ========================================================= */
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  $('btn-theme').textContent = theme === 'dark' ? 'Light' : 'Dark';
+  $('btn-theme').setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme');
+}
+applyTheme(store('cortex-theme') === 'light' ? 'light' : 'dark');
+$('btn-theme').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  store('cortex-theme', next);
+  applyTheme(next);
+});
 
-  function scrollToTester() {
-    document.getElementById('tester-container').scrollIntoView({ behavior: 'smooth' });
-    document.getElementById('prompt-input').focus();
-  }
+/* =========================================================
+   Normalization: accepts today's payload and the extended contract
+   ========================================================= */
+const TIERS = ['light', 'standard', 'heavy'];
+const TASKS = ['factual', 'code', 'reasoning', 'summarize', 'creative', 'chat'];
 
-  function scrollToCharts() {
-    document.getElementById('analytics-section').scrollIntoView({ behavior: 'smooth' });
-  }
+const isCacheRow = r => r.cache === true || r.provider === 'cache';
+const isErrorRow = r => r.status === 'error' || r.provider === 'none' || (isNum(r.status) && r.status >= 400);
+const isFailoverRow = r => (Array.isArray(r.failedProviders) && r.failedProviders.length > 0)
+  || (Array.isArray(r.attempts) && r.attempts.some(a => a && a.outcome && a.outcome !== 'ok'));
+const rowKey = r => String(r.time || '') + '|' + String(r.prompt || '');
 
-  function filterLogs(filter) {
-    activeFilter = filter;
-    ['all', 'cache', 'failover'].forEach(f => {
-      const btn = document.getElementById(`tab-${f}`);
-      if (btn) {
-        if (f === filter) {
-          btn.className = 'px-4 py-2 rounded-xl bg-[#5b50e6] text-white text-xs font-bold shadow-md transition';
-        } else {
-          btn.className = 'px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition';
-        }
+/** Attempts for a row: real attempts when present, otherwise reconstructed from failedProviders. */
+function rowAttempts(r) {
+  if (Array.isArray(r.attempts) && r.attempts.length) return { list: r.attempts, derived: false };
+  if (isCacheRow(r)) return { list: [], derived: true };
+  const list = (r.failedProviders || []).map(p => ({ provider: p, outcome: 'error' }));
+  if (!isErrorRow(r) && r.provider && r.provider !== 'none') list.push({ provider: r.provider, model: r.model, outcome: 'ok', latencyMs: r.latencyMs });
+  return { list, derived: true };
+}
+
+function deriveProviderStats(recent) {
+  const out = {};
+  const get = n => (out[n] ||= { requests: 0, successes: 0, failures: 0, rateLimited: 0, timeouts: 0, lat: [], lastError: null, lastErrorAt: null });
+  for (const r of recent) {
+    for (const a of rowAttempts(r).list) {
+      if (!a || !a.provider || a.provider === 'cache' || a.provider === 'none') continue;
+      const p = get(a.provider);
+      p.requests++;
+      if (a.outcome === 'ok') { p.successes++; if (isNum(a.latencyMs)) p.lat.push(a.latencyMs); }
+      else {
+        p.failures++;
+        if (a.outcome === 'rate_limited') p.rateLimited++;
+        if (a.outcome === 'timeout') p.timeouts++;
+        if (a.error && !p.lastError) { p.lastError = a.error; p.lastErrorAt = r.time; }
       }
-    });
-    if (rawData) renderLogs(rawData.recent);
-  }
-
-  function renderActivityChart(recent) {
-    const container = document.getElementById('activity-chart');
-    const now = Date.now();
-    const bucketMs = 2 * 60 * 60 * 1000;
-    const currentBucketStart = Math.floor(now / bucketMs) * bucketMs;
-    const rangeStart = currentBucketStart - 11 * bucketMs;
-    const buckets = Array.from({ length: 12 }, (_, index) => ({
-      time: new Date(rangeStart + index * bucketMs), hits: 0, calls: 0, errors: 0
-    }));
-    (Array.isArray(recent) ? recent : []).forEach(row => {
-      const time = new Date(row.time || row.ts || row.created_at || '');
-      if (Number.isNaN(time.getTime()) || time.getTime() < rangeStart || time.getTime() >= rangeStart + buckets.length * bucketMs) return;
-      const bucket = buckets[Math.floor((time.getTime() - rangeStart) / bucketMs)];
-      const failed = row.status === 'error' || row.provider === 'none' || (typeof row.status === 'number' && row.status >= 400);
-      if (failed) bucket.errors++;
-      else if (row.cache || row.cacheHit || row.provider === 'cache') bucket.hits++;
-      else bucket.calls++;
-    });
-
-    if (!buckets.some(bucket => bucket.hits + bucket.calls + bucket.errors > 0)) {
-      container.innerHTML = '<div class="chart-empty">No requests in the last 24 hours yet.</div>';
-      return;
     }
-
-    const width = 720, height = 220, left = 42, right = 12, top = 12, bottom = 31;
-    const plotWidth = width - left - right, plotHeight = height - top - bottom;
-    const maxCount = Math.max(1, ...buckets.map(bucket => bucket.hits + bucket.calls + bucket.errors));
-    const maxAxis = Math.max(4, Math.ceil(maxCount / 4) * 4);
-    const slot = plotWidth / buckets.length;
-    const barWidth = Math.min(27, slot * .56);
-    const y = value => top + plotHeight - (value / maxAxis) * plotHeight;
-    const grid = [0, .25, .5, .75, 1].map(fraction => {
-      const value = Math.round(maxAxis * fraction);
-      const yPos = y(value);
-      return `<g><line x1="${left}" x2="${width - right}" y1="${yPos}" y2="${yPos}" class="chart-grid-line"/><text x="${left - 9}" y="${yPos + 3}" text-anchor="end" class="chart-axis-label">${value}</text></g>`;
-    }).join('');
-    const bars = buckets.map((bucket, index) => {
-      const x = left + slot * index + (slot - barWidth) / 2;
-      const values = [
-        { key: 'hits', color: '#20a87a' },
-        { key: 'calls', color: '#665ce7' },
-        { key: 'errors', color: '#e15d69' }
-      ];
-      let accumulated = 0;
-      const segments = values.map(series => {
-        const value = bucket[series.key];
-        if (!value) return '';
-        const segmentTop = y(accumulated + value);
-        const segmentHeight = (value / maxAxis) * plotHeight;
-        accumulated += value;
-        return `<rect x="${x}" y="${segmentTop}" width="${barWidth}" height="${segmentHeight}" rx="3" fill="${series.color}"><title>${bucket.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${value} ${series.key}</title></rect>`;
-      }).join('');
-      const label = index % 2 === 0
-        ? `<text x="${x + barWidth / 2}" y="${height - 7}" text-anchor="middle" class="chart-axis-label">${bucket.time.toLocaleTimeString([], { hour: '2-digit' })}</text>`
-        : '';
-      return segments + label;
-    }).join('');
-    container.innerHTML = `<svg class="activity-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Request activity for the last 24 hours">${grid}${bars}</svg>`;
   }
+  return out;
+}
 
-  function renderCacheChart(cache) {
-    const container = document.getElementById('cache-chart');
-    const hits = Number(cache.hits) || 0;
-    const misses = Number(cache.misses) || 0;
-    const total = hits + misses;
-    const percent = total ? hits / total : 0;
-    const circumference = 2 * Math.PI * 52;
-    const hitLength = circumference * percent;
-    container.innerHTML = `
-      <div class="donut-layout">
-        <svg class="donut-svg" viewBox="0 0 150 150" role="img" aria-label="${(percent * 100).toFixed(1)} percent cache hit rate">
-          <circle cx="75" cy="75" r="52" fill="none" stroke="#7770e8" stroke-width="16" opacity=".22"/>
-          <circle cx="75" cy="75" r="52" fill="none" stroke="#20a87a" stroke-width="16" stroke-linecap="round" stroke-dasharray="${hitLength} ${circumference}" transform="rotate(-90 75 75)"/>
-          <text x="75" y="71" text-anchor="middle" fill="var(--text-primary)" font-size="20" font-weight="800">${(percent * 100).toFixed(1)}%</text>
-          <text x="75" y="89" text-anchor="middle" fill="var(--text-muted)" font-size="9">hit rate</text>
-        </svg>
-        <div class="donut-legend">
-          <div class="donut-legend-row"><i class="legend-dot hit"></i><span>Cache hits</span><strong>${hits.toLocaleString()}</strong></div>
-          <div class="donut-legend-row"><i class="legend-dot miss"></i><span>Cache misses</span><strong>${misses.toLocaleString()}</strong></div>
-          <div class="donut-caption">${total.toLocaleString()} cache lookups recorded</div>
-        </div>
-      </div>`;
-  }
+function normalize(d) {
+  d = d && typeof d === 'object' ? d : {};
+  const recent = Array.isArray(d.recent) ? d.recent.filter(r => r && typeof r === 'object') : [];
+  const totals = d.totals || {};
+  const cache = d.cache || {};
+  const config = d.config || {};
+  const breakers = d.breakers || {};
+  const byProvider = d.byProvider || {};
+  const derived = deriveProviderStats(recent);
 
-  function renderBarChart(containerId, items, options = {}) {
-    const container = document.getElementById(containerId);
-    if (!items.length) {
-      container.innerHTML = `<div class="chart-empty">${options.emptyMessage || 'No data available yet.'}</div>`;
-      return;
+  // Providers
+  let providers = {};
+  let providerSource = 'contract';
+  if (d.providers && typeof d.providers === 'object' && Object.keys(d.providers).length) {
+    for (const [name, p] of Object.entries(d.providers)) {
+      const dv = derived[name];
+      providers[name] = {
+        ...p,
+        p95LatencyMs: isNum(p.p95LatencyMs) ? p.p95LatencyMs : (dv ? percentile(dv.lat, 0.95) : null),
+        avgLatencyMs: isNum(p.avgLatencyMs) ? p.avgLatencyMs : (dv ? mean(dv.lat) : null)
+      };
     }
-    const maxValue = Math.max(1, ...items.map(item => item.value));
-    const color = options.color || '#665ce7';
-    container.innerHTML = `<div class="chart-bar-list">${items.slice(0, 8).map(item => {
-      const width = item.value > 0 ? Math.max(2, item.value / maxValue * 100) : 0;
-      return `<div class="chart-bar-row">
-        <div class="chart-bar-heading"><span title="${esc(item.label)}">${esc(item.label)}</span><strong>${options.format ? options.format(item.value) : item.value.toLocaleString()}</strong></div>
-        <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${width}%;background:${color}"></div></div>
-        ${item.count ? `<div class="chart-bar-note">${item.count} recent calls</div>` : ''}
-      </div>`;
-    }).join('')}</div>`;
-  }
-
-  function renderAnalytics(data) {
-    renderActivityChart(data.recent);
-    renderCacheChart(data.cache || {});
-
-    const providerCounts = Object.entries(data.byProvider || {})
-      .filter(([provider]) => provider !== 'cache' && provider !== 'none')
-      .map(([label, value]) => ({ label, value: Number(value) || 0 }))
-      .sort((a, b) => b.value - a.value);
-    renderBarChart('provider-chart', providerCounts, { emptyMessage: 'No provider calls recorded yet.' });
-
-    const spend = new Map();
-    (Array.isArray(data.recent) ? data.recent : []).forEach(row => {
-      if (row.provider === 'cache' || row.provider === 'none' || row.status === 'error') return;
-      const baseCost = Number(row.actualCost ?? row.cost) || 0;
-      const verificationCost = row.actualCost === undefined ? (Number(row.verifyCost) || 0) : 0;
-      const current = spend.get(row.provider || 'unknown') || { label: row.provider || 'unknown', value: 0, count: 0 };
-      current.value += baseCost + verificationCost;
-      current.count++;
-      spend.set(current.label, current);
-    });
-    const spendItems = Array.from(spend.values()).sort((a, b) => b.value - a.value);
-    renderBarChart('spend-chart', spendItems, {
-      color: '#20a87a',
-      format: fmtUsd,
-      emptyMessage: 'No provider calls in the recent request history.'
-    });
-  }
-
-  async function refreshData() {
-    try {
-      const res = await fetch('/v1/chat/live');
-      if (!res.ok) throw new Error('Gateway Offline');
-      const data = await res.json();
-      rawData = data;
-      const c = data.cache;
-
-      // Update Top Cards
-      document.getElementById('metric-requests').textContent = c.requests.toLocaleString();
-      document.getElementById('metric-split').textContent = `${c.hits} hits / ${c.misses} misses`;
-      
-      const totalReq = c.requests || 1;
-      const hitPct = Math.round((c.hits / totalReq) * 100);
-      document.getElementById('bar-hits').style.width = hitPct + '%';
-      document.getElementById('bar-misses').style.width = (100 - hitPct) + '%';
-
-      document.getElementById('metric-hitrate').textContent = (c.hitRate * 100).toFixed(1) + '%';
-      document.getElementById('metric-entries').textContent = `${c.entries} entries cached`;
-      document.getElementById('metric-threshold').textContent = c.threshold || '0.92';
-
-      document.getElementById('metric-saved').textContent = fmtUsd(c.costSaved);
-      document.getElementById('metric-tokens').textContent = `${c.tokensSaved.toLocaleString()} tokens avoided`;
-      document.getElementById('metric-net-saved').textContent = `After verification: ${fmtUsd(c.netCostSaved)}`;
-
-      document.getElementById('metric-spent').textContent = fmtUsd(data.totals.spent);
-      document.getElementById('metric-failovers').textContent = `${data.totals.failovers} failover${data.totals.failovers === 1 ? '' : 's'}`;
-
-      document.getElementById('status-text').textContent = 'Gateway Online';
-      document.getElementById('status-pill').className = 'status-pill status-online flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold';
-      document.getElementById('status-indicator').className = 'status-indicator status-online-dot w-2 h-2 rounded-full animate-pulse';
-
-      renderLogs(data.recent);
-      renderAnalytics(data);
-    } catch (e) {
-      document.getElementById('status-text').textContent = 'Gateway Disconnected';
-      document.getElementById('status-pill').className = 'status-pill status-offline flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold';
-      document.getElementById('status-indicator').className = 'status-indicator status-offline-dot w-2 h-2 rounded-full';
+  } else {
+    providerSource = 'derived';
+    const names = new Set([...Object.keys(breakers), ...Object.keys(byProvider), ...Object.keys(derived)]);
+    names.delete('cache'); names.delete('none');
+    for (const name of names) {
+      const b = breakers[name] || {};
+      const dv = derived[name] || { requests: 0, successes: 0, failures: 0, rateLimited: 0, timeouts: 0, lat: [] };
+      const retry = num(b.retryInMs);
+      providers[name] = {
+        configured: null, enabled: null,
+        state: b.state || 'healthy',
+        models: null,
+        requests: dv.requests, successes: dv.successes, failures: dv.failures,
+        rateLimited: dv.rateLimited, timeouts: dv.timeouts,
+        successRate: dv.requests ? dv.successes / dv.requests : null,
+        avgLatencyMs: mean(dv.lat), p95LatencyMs: percentile(dv.lat, 0.95),
+        inflight: null, maxInflight: null,
+        cooldownUntil: retry > 0 ? new Date(Date.now() + retry).toISOString() : null,
+        lastError: b.lastError || dv.lastError || null, lastErrorAt: dv.lastErrorAt || null,
+        served: num(byProvider[name])
+      };
     }
   }
 
-  function renderLogs(recent) {
-    if (!recent || !recent.length) {
-      document.getElementById('log-list').innerHTML = `
-        <div class="p-4 rounded-2xl purple-subcard text-slate-400 text-xs text-center">
-          No requests logged yet.
-        </div>`;
-      document.getElementById('log-count').textContent = '0 items';
-      return;
-    }
-
-    let filtered = recent;
-    if (activeFilter === 'cache') {
-      filtered = recent.filter(r => r.cache || r.provider === 'cache');
-    } else if (activeFilter === 'failover') {
-      filtered = recent.filter(r => r.failedProviders && r.failedProviders.length > 0);
-    }
-
-    document.getElementById('log-count').textContent = `${filtered.length} items`;
-
-    const html = filtered.map(r => {
-      const requestIndex = recent.indexOf(r);
-      const isCache = r.cache || r.provider === 'cache';
-      const hasFailover = r.failedProviders && r.failedProviders.length > 0;
-      
-      let badgeBg = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
-      let provLabel = (r.provider || 'GROQ').toUpperCase();
-      if (isCache) {
-        badgeBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-        provLabel = 'CACHE HIT';
-      } else if (provLabel === 'OPENROUTER' || provLabel === 'OPENAI') {
-        badgeBg = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
-      } else if (provLabel === 'NVIDIA') {
-        badgeBg = 'bg-lime-500/20 text-lime-300 border-lime-500/30';
-      } else if (provLabel === 'GEMINI') {
-        badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-      } else if (provLabel === 'SAMBANOVA') {
-        badgeBg = 'bg-orange-500/20 text-orange-300 border-orange-500/30';
-      } else if (provLabel === 'MISTRAL') {
-        badgeBg = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-      } else if (provLabel === 'HUGGINGFACE') {
-        badgeBg = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
-      } else if (provLabel === 'GITHUB') {
-        badgeBg = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-      } else if (provLabel === 'NONE') {
-        badgeBg = 'bg-red-500/20 text-red-300 border-red-500/30';
-      }
-
-      const simText = isCache && r.similarity ? ` (${r.similarity.toFixed(3)})` : '';
-      const foTag = hasFailover ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold ml-1">FO</span>` : '';
-      const checkTag = r.verified === true
-        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold ml-1">CONFIRMED BY CHECK</span>'
-        : r.verification === 'rejected'
-          ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold ml-1">WRONG MATCH BLOCKED${typeof r.nearSimilarity === 'number' ? ` (${r.nearSimilarity.toFixed(3)})` : ''}</span>`
-          : r.verification === 'failed'
-            ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold ml-1">CHECK FAILED</span>'
-            : '';
-
-      return `
-        <div onclick="selectRequest(${requestIndex})" class="p-3.5 rounded-xl purple-subcard hover:border-[#5b50e6] transition cursor-pointer flex items-center justify-between gap-3 group">
-          <div class="flex items-center gap-3 overflow-hidden">
-            <span class="text-xs px-2.5 py-1 rounded-lg border ${badgeBg} font-bold shrink-0">
-              ${provLabel}${simText}${foTag}
-            </span>
-            <span class="text-xs text-slate-200 font-medium truncate group-hover:text-indigo-200 transition">
-              ${esc(r.prompt || 'Chat Completion')}
-            </span>
-            ${checkTag}
-          </div>
-          <div class="text-right shrink-0 text-xs">
-            <div class="font-bold text-slate-200">${isCache ? fmtUsd(r.savedCost) : fmtUsd(r.cost)}</div>
-            <div class="text-[10px] text-slate-400 font-medium">${r.latencyMs || 0}ms</div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    document.getElementById('log-list').innerHTML = html;
-  }
-
-  function selectRequest(idx) {
-    if (!rawData || !rawData.recent || !rawData.recent[idx]) return;
-    const r = rawData.recent[idx];
-    const isCache = r.cache || r.provider === 'cache';
-    
-    document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${r.provider}`;
-    document.getElementById('inspect-tag').className = isCache 
-      ? 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-      : 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
-
-    document.getElementById('response-box').textContent = 
-      `Prompt: "${r.prompt}"\n\n` +
-      `Provider: ${r.provider}\n` +
-      `Cache Hit: ${isCache ? 'YES' : 'NO'}\n` +
-      `Similarity Score: ${r.similarity ? r.similarity.toFixed(4) : 'N/A'}\n` +
-      `Cache Check: ${r.verified === true ? 'Confirmed by check' : r.verification === 'rejected' ? `Wrong match blocked (similarity ${Number(r.nearSimilarity || 0).toFixed(4)})` : r.verification === 'failed' ? 'Check failed; treated as a miss' : 'Not needed'}\n` +
-      `Tokens: ${r.tokens || r.savedTokens || 0}\n` +
-      `Latency: ${r.latencyMs} ms\n` +
-      `Failed Providers: ${r.failedProviders?.length ? r.failedProviders.join(', ') : 'None'}`;
-
-    document.getElementById('detail-provider').textContent = (r.provider || 'auto').toUpperCase();
-    document.getElementById('detail-latency').textContent = `${r.latencyMs || 0} ms`;
-    document.getElementById('detail-cost').textContent = isCache ? `Saved ${fmtUsd(r.savedCost)}` : fmtUsd(r.cost);
-  }
-
-  async function sendPrompt() {
-    const input = document.getElementById('prompt-input');
-    const text = input.value.trim();
-    if (!text) return;
-
-    const btn = document.getElementById('send-btn');
-    const resBox = document.getElementById('response-box');
-    
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-    resBox.textContent = 'Sending prompt through CortexGate Gateway...';
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (document.getElementById('bypass-cache').checked) {
-      headers['x-cache'] = 'bypass';
-    }
-
-    const providerVal = document.getElementById('provider-select').value;
-    const body = { messages: [{ role: 'user', content: text }] };
-    if (providerVal) body.provider = providerVal;
-
-    try {
-      const r = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body)
-      });
-      const data = await r.json();
-
-      // Handle 202 Queued (rate-limit token bucket empty)
-      if (r.status === 202) {
-        resBox.textContent = '⏳ Request queued (rate limit reached). Try again in a moment.';
-        document.getElementById('inspect-tag').textContent = 'Queued';
-        document.getElementById('inspect-tag').className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30';
-        btn.disabled = false;
-        btn.textContent = 'Send Request →';
-        return;
-      }
-
-      if (data.error) throw new Error(data.error.message);
-
-      const isCache = data.provider === 'cache';
-      const answer = data.choices?.[0]?.message?.content || '';
-      const providerLabel = (data.provider || 'unknown').toUpperCase();
-
-      document.getElementById('inspect-tag').textContent = isCache ? 'Cache Hit' : `Served by ${data.provider || 'unknown'}`;
-      document.getElementById('inspect-tag').className = isCache 
-        ? 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-        : 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
-
-      resBox.textContent = `[${isCache ? '⚡ CACHE HIT' : '🤖 PROVIDER: ' + providerLabel}]\n\n${answer}`;
-      
-      document.getElementById('detail-provider').textContent = (data.provider || 'groq').toUpperCase();
-      document.getElementById('detail-latency').textContent = 'Completed';
-      document.getElementById('detail-cost').textContent = isCache ? `Saved $${data.cache?.saved_cost?.toFixed(5) || '0'}` : fmtUsd(data.cost);
-
-      input.value = '';
-    } catch (err) {
-      resBox.textContent = 'Error: ' + err.message;
-    }
-
-    btn.disabled = false;
-    btn.textContent = 'Send Request ➔';
-    refreshData();
-  }
-
-  async function resetDemoData() {
-    if (!window.confirm('Reset demo data? This deletes all request history in MongoDB and clears the cache and dashboard stats for this gateway.')) return;
-    try {
-      const res = await fetch('/v1/chat/reset', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Reset failed');
-      document.getElementById('response-box').textContent = `Demo data reset. Removed ${data.deletedCount} MongoDB request records.`;
-      document.getElementById('inspect-tag').textContent = 'Reset complete';
-      refreshData();
-    } catch (err) {
-      document.getElementById('response-box').textContent = 'Reset failed: ' + err.message;
+  // Routing
+  let tierCounts = d.routing && d.routing.tierCounts;
+  let taskCounts = d.routing && d.routing.taskCounts;
+  let routingSource = 'contract';
+  if (!tierCounts && !taskCounts) {
+    routingSource = 'derived';
+    tierCounts = {}; taskCounts = {};
+    for (const r of recent) {
+      if (!r.route) continue;
+      if (r.route.tier) tierCounts[r.route.tier] = (tierCounts[r.route.tier] || 0) + 1;
+      if (r.route.task) taskCounts[r.route.task] = (taskCounts[r.route.task] || 0) + 1;
     }
   }
+  const policy = config.routingPolicy || (d.routing && d.routing.policy) || null;
 
-  document.getElementById('prompt-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendPrompt();
+  // KPIs
+  const requests = isNum(totals.requests) ? totals.requests : recent.length;
+  const errors = isNum(totals.errors) ? totals.errors : recent.filter(isErrorRow).length;
+  const latencies = recent.map(r => r.latencyMs).filter(isNum);
+  const netSaved = isNum(cache.netSaved) ? cache.netSaved
+    : isNum(cache.costSaved) ? cache.costSaved - num(cache.verifyCost) - num(cache.embedCost) : null;
+  const queued = isNum(totals.queued) ? totals.queued : null;
+
+  return {
+    raw: d, recent, totals, cache, config, providers, providerSource,
+    routing: { policy, tierCounts: tierCounts || {}, taskCounts: taskCounts || {}, source: routingSource },
+    persistence: d.persistence || {},
+    kpi: {
+      requests, errors,
+      successRate: requests ? (requests - errors) / requests : null,
+      hitRate: isNum(cache.hitRate) ? cache.hitRate : null,
+      failovers: isNum(totals.failovers) ? totals.failovers : recent.filter(isFailoverRow).length,
+      avgLatency: mean(latencies), p95Latency: percentile(latencies, 0.95),
+      spent: isNum(totals.spent) ? totals.spent : null,
+      netSaved, queued
+    }
+  };
+}
+
+/* =========================================================
+   State
+   ========================================================= */
+const state = {
+  model: null,
+  filter: 'all',
+  providerFilter: '',
+  expanded: new Set(),
+  conn: 'connecting',
+  lastUpdate: 0
+};
+
+/* =========================================================
+   Header pills
+   ========================================================= */
+function setPill(id, dotClass, label, value, title) {
+  const el = $(id);
+  if (!el) return;
+  el.replaceChildren();
+  append(el, [h('i', { class: 'dot ' + (dotClass || '') }), value === undefined ? h('span', null, label) : [label + ' ', h('b', null, value)]]);
+  if (title) el.title = title;
+}
+
+function renderConn() {
+  const map = {
+    connecting: ['warn pulse', 'Connecting…'],
+    ws: ['good pulse', 'Live · WebSocket'],
+    poll: ['good', 'Live · polling'],
+    offline: ['crit', 'Disconnected']
+  };
+  const [cls, label] = map[state.conn] || map.connecting;
+  setPill('pill-conn', cls, label, undefined, state.lastUpdate ? 'Last update ' + new Date(state.lastUpdate).toLocaleTimeString() : 'Live metrics connection');
+}
+
+function renderHeader(M) {
+  const pol = $('pill-policy');
+  pol.replaceChildren();
+  append(pol, ['Policy ', h('b', null, M.routing.policy || DASH)]);
+
+  const rl = M.config.rateLimit;
+  if (rl && rl.redis) {
+    const ok = rl.redis === 'connected';
+    setPill('pill-redis', ok ? 'good' : 'warn', 'Redis', ok ? 'connected' : rl.redis,
+      ok ? `Rate limit ${rl.enabled === false ? 'disabled' : `${fmtInt(rl.maxTokens)} req / ${fmtInt(rl.windowSec)}s`}` : 'Redis unavailable: rate limiting fails open');
+  } else setPill('pill-redis', '', 'Redis', DASH, 'Redis status not reported by this gateway version');
+
+  const mongo = M.persistence.mongodb;
+  if (mongo) {
+    const cls = mongo === 'connected' ? 'good' : mongo === 'degraded' ? 'warn' : 'crit';
+    setPill('pill-mongo', cls, 'Mongo', mongo, 'History source: ' + (M.persistence.historySource || DASH));
+  } else setPill('pill-mongo', '', 'Mongo', DASH);
+}
+
+/* =========================================================
+   KPIs
+   ========================================================= */
+function kpi(label, value, hint, title) {
+  return h('div', { class: 'card kpi', title: title || null },
+    h('div', { class: 'label' }, label), h('div', { class: 'value' }, value), h('div', { class: 'hint' }, hint || ''));
+}
+function renderKpis(M) {
+  const k = M.kpi, c = M.cache;
+  const failoverHint = k.requests && isNum(k.failovers) ? fmtPct(k.failovers / k.requests) + ' of requests' : '';
+  mount('kpis',
+    kpi('Total requests', fmtInt(k.requests), isNum(k.errors) ? `${fmtInt(k.errors)} errors` : ''),
+    kpi('Success rate', fmtPct(k.successRate), k.requests ? `${fmtInt(k.requests - k.errors)} / ${fmtInt(k.requests)} served` : 'No traffic yet'),
+    kpi('Cache hit rate', fmtPct(k.hitRate), isNum(c.hits) ? `${fmtInt(c.hits)} hits · ${fmtInt(c.entries)} entries` : ''),
+    kpi('Failovers', fmtInt(k.failovers), failoverHint),
+    kpi('Avg latency', fmtMs(k.avgLatency), isNum(k.p95Latency) ? `p95 ${fmtMs(k.p95Latency)} · recent window` : 'recent window'),
+    kpi('Estimated spend', fmtUsd(k.spent), 'list-price estimate', 'Provider list prices × tokens, including cache verification calls'),
+    kpi('Net savings', fmtUsd(k.netSaved), isNum(c.costSaved) ? `gross ${fmtUsd(c.costSaved)}` : '', 'Cost avoided by cache hits minus verification and embedding cost'),
+    kpi('Queued', k.queued === null ? DASH : fmtInt(k.queued), k.queued === null ? 'not reported' : 'rate-limited, waiting')
+  );
+}
+
+/* =========================================================
+   Providers
+   ========================================================= */
+const STATE_BADGE = {
+  healthy: ['good', 'Healthy'], probing: ['warn', 'Probing'], open: ['crit', 'Circuit open'],
+  cooldown: ['serious', 'Cooldown'], disabled: ['', 'Disabled'], unconfigured: ['outline', 'No API key']
+};
+function providerStateKey(p) {
+  if (p.state && STATE_BADGE[p.state]) return p.state;
+  if (p.configured === false) return 'unconfigured';
+  if (p.enabled === false) return 'disabled';
+  return 'healthy';
+}
+function countdownText(until) {
+  const ms = new Date(until).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return Math.ceil(ms / 1000) + 's';
+}
+function stat(k, v, title) { return h('div', { class: 'stat', title: title || null }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v)); }
+
+function providerCard(name, p) {
+  const sk = providerStateKey(p);
+  const [cls, label] = STATE_BADGE[sk];
+  const sr = isNum(p.successRate) ? p.successRate : (num(p.requests) ? num(p.successes) / num(p.requests) : null);
+  const srCls = sr === null ? '' : sr >= 0.95 ? '' : sr >= 0.7 ? 'warn' : 'crit';
+  const cd = p.cooldownUntil ? countdownText(p.cooldownUntil) : null;
+  const models = p.models && typeof p.models === 'object'
+    ? h('dl', { class: 'models' }, TIERS.filter(t => p.models[t]).map(t => [h('dt', null, t), h('dd', { title: String(p.models[t]) }, String(p.models[t]))]))
+    : null;
+  const inflight = isNum(p.inflight) ? `${p.inflight}${isNum(p.maxInflight) ? ' / ' + p.maxInflight : ''}` : DASH;
+
+  return h('article', { class: 'card pcard' + (sk === 'unconfigured' || sk === 'disabled' ? ' dim' : '') },
+    h('div', { class: 'card-head' },
+      h('div', null, h('div', { class: 'pname' }, name),
+        isNum(p.rrWeight) ? h('div', { class: 'muted', style: 'font-size:11px' }, 'weight ' + p.rrWeight) : null),
+      h('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end' },
+        h('span', { class: 'badge ' + cls }, label),
+        cd ? h('span', { class: 'badge serious num', 'data-until': p.cooldownUntil, title: 'Cooldown remaining' }, cd) : null)
+    ),
+    models,
+    h('div', null,
+      h('div', { style: 'display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px' },
+        h('span', { class: 'muted' }, 'Success rate'), h('span', { class: 'num' }, fmtPct(sr))),
+      h('div', { class: 'bar', role: 'img', 'aria-label': 'Success rate ' + fmtPct(sr) },
+        h('i', { class: srCls, style: `width:${sr === null ? 0 : Math.max(2, sr * 100)}%` }))
+    ),
+    h('div', { class: 'stats' },
+      stat('Requests', fmtInt(p.requests), isNum(p.served) ? `${p.served} served as final provider` : null),
+      stat('Avg latency', fmtMs(p.avgLatencyMs)),
+      stat('p95', fmtMs(p.p95LatencyMs)),
+      stat('In flight', inflight),
+      stat('Rate-limited', fmtInt(p.rateLimited)),
+      stat('Timeouts', fmtInt(p.timeouts))
+    ),
+    p.lastError ? h('div', { class: 'lasterr', title: String(p.lastError) + (p.lastErrorAt ? `\n(${new Date(p.lastErrorAt).toLocaleString()})` : '') },
+      (p.lastErrorAt ? fmtAgo(p.lastErrorAt) + ' · ' : '') + truncate(p.lastError, 140)) : null
+  );
+}
+
+function renderProviders(M) {
+  const entries = Object.entries(M.providers);
+  const order = Array.isArray(M.config.providerOrder) ? M.config.providerOrder : [];
+  const rank = n => { const i = order.indexOf(n); return i < 0 ? 999 : i; };
+  const stateRank = p => ({ unconfigured: 2, disabled: 1 }[providerStateKey(p)] || 0);
+  entries.sort((a, b) => stateRank(a[1]) - stateRank(b[1]) || rank(a[0]) - rank(b[0]) || num(b[1].requests) - num(a[1].requests) || a[0].localeCompare(b[0]));
+  $('prov-sub').textContent = M.providerSource === 'derived'
+    ? 'Health from circuit breakers; counts and latency derived from the recent request log'
+    : `Health, latency and capacity per upstream${isNum(M.config.providerTimeoutMs) ? ` · ${fmtMs(M.config.providerTimeoutMs)} attempt timeout` : ''}`;
+  if (!entries.length) { mount('providers', h('div', { class: 'card empty' }, 'No provider data reported yet.')); return; }
+  mount('providers', entries.map(([n, p]) => providerCard(n, p)));
+}
+
+function tickCountdowns() {
+  document.querySelectorAll('[data-until]').forEach(el => {
+    const t = countdownText(el.getAttribute('data-until'));
+    if (t) el.textContent = t; else el.remove();
   });
+}
 
-  refreshData();
-  setInterval(refreshData, 2000);
+/* =========================================================
+   Routing panel
+   ========================================================= */
+function hbars(counts, keys) {
+  const all = [...new Set([...keys, ...Object.keys(counts)])];
+  const total = all.reduce((a, k) => a + num(counts[k]), 0);
+  const max = Math.max(1, ...all.map(k => num(counts[k])));
+  return h('div', { class: 'hbars' }, all.map(k => {
+    const v = num(counts[k]);
+    return h('div', { class: 'hbar', title: `${k}: ${v} (${total ? fmtPct(v / total, 0) : '0%'})` },
+      h('span', { class: 'name' }, k),
+      h('div', { class: 'track' }, v ? h('i', { style: `width:${(v / max) * 100}%` }) : null),
+      h('span', { class: 'val' }, `${v}${total ? ' · ' + fmtPct(v / total, 0) : ''}`));
+  }));
+}
+function renderRouting(M) {
+  const R = M.routing;
+  $('rt-policy').textContent = R.policy || DASH;
+  const hasData = Object.values(R.tierCounts).some(v => num(v) > 0) || Object.values(R.taskCounts).some(v => num(v) > 0);
+  const body = hasData
+    ? [h('div', { class: 'muted', style: 'font-size:11.5px;margin-bottom:6px' }, 'Tier'), hbars(R.tierCounts, TIERS),
+       h('div', { class: 'muted', style: 'font-size:11.5px;margin:14px 0 6px' }, 'Task'), hbars(R.taskCounts, TASKS),
+       R.source === 'derived' ? h('p', { class: 'note' }, 'Derived from the recent request log.') : null]
+    : h('div', { class: 'empty', style: 'padding:16px' }, 'No routing decisions reported yet. Send a request, or upgrade the gateway to emit routing data.');
+  mount('routing', body, h('div', { class: 'explain' },
+    h('b', null, 'How routing works'),
+    h('ol', null,
+      h('li', null, 'Each prompt is classified by task (factual, code, reasoning, …) and estimated size, which sets a tier: light, standard or heavy.'),
+      h('li', null, 'The policy picks providers for that tier: cost favours cheap, fast models; quality favours the strongest models; balanced weighs both.'),
+      h('li', null, 'Providers are tried in order with a fixed per-attempt timeout. A timeout, 429 or 5xx fails over to the next one; repeated failures open the circuit breaker.'),
+      h('li', null, 'Before any provider call the semantic cache is checked; near matches below the trust threshold are verified first.'))));
+}
+
+/* =========================================================
+   Charts
+   ========================================================= */
+const tip = $('tooltip');
+function showTip(evt, title, lines) {
+  tip.replaceChildren();
+  append(tip, [h('div', { class: 't' }, title), lines.map(l => h('div', null, l))]);
+  tip.style.display = 'block';
+  const x = Math.min(window.innerWidth - tip.offsetWidth - 8, evt.clientX + 12);
+  const y = Math.max(8, evt.clientY - tip.offsetHeight - 10);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+const TS_SERIES = [
+  { key: 'provider', label: 'Provider', color: 'var(--s-provider)' },
+  { key: 'cache', label: 'Cache hit', color: 'var(--s-cache)' },
+  { key: 'error', label: 'Error', color: 'var(--crit)' }
+];
+function niceStep(range, ticks) {
+  const raw = range / ticks, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+function renderTimeseries(M) {
+  mount('ts-legend', TS_SERIES.map(sr => h('span', null, h('i', { style: `background:${sr.color}` }), sr.label)));
+  const times = M.recent.map(r => new Date(r.time).getTime()).filter(Number.isFinite);
+  if (!times.length) { mount('chart-ts', h('div', { class: 'empty' }, 'No requests yet.')); $('ts-sub').textContent = 'From recent request log'; return; }
+  const now = Date.now();
+  const spans = [15, 30, 60, 180, 360, 720, 1440].map(m => m * 60000);
+  const oldest = Math.min(...times);
+  const span = spans.find(sp => now - oldest <= sp) || spans[spans.length - 1];
+  const N = 30, bucket = span / N, start = now - span;
+  const buckets = Array.from({ length: N }, (_, i) => ({ t: start + i * bucket, provider: 0, cache: 0, error: 0 }));
+  let shown = 0;
+  for (const r of M.recent) {
+    const t = new Date(r.time).getTime();
+    if (!Number.isFinite(t) || t < start) continue;
+    const b = buckets[Math.min(N - 1, Math.floor((t - start) / bucket))];
+    if (isErrorRow(r)) b.error++; else if (isCacheRow(r)) b.cache++; else b.provider++;
+    shown++;
+  }
+  const label = span >= 3600000 ? (span / 3600000) + 'h' : (span / 60000) + 'm';
+  $('ts-sub').textContent = `Last ${label} · ${shown} of ${M.recent.length} logged requests`;
+
+  const W = 640, H = 220, L = 34, R = 8, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+  const maxV = Math.max(1, ...buckets.map(b => b.provider + b.cache + b.error));
+  const step = Math.max(1, niceStep(maxV, 4));
+  const top = Math.ceil(maxV / step) * step;
+  const y = v => T + ph - (v / top) * ph;
+  const slot = pw / N, bw = Math.max(3, slot - 3);
+  const svg = s('svg', { class: 'chart-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Requests per ${Math.round(bucket / 1000)} seconds, last ${label}` });
+  for (let v = 0; v <= top; v += step) {
+    append(svg, [s('line', { class: v === 0 ? 'base' : 'gl', x1: L, x2: W - R, y1: y(v), y2: y(v) }),
+      s('text', { x: L - 6, y: y(v) + 3, 'text-anchor': 'end' }, String(v))]);
+  }
+  const fmtB = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  buckets.forEach((b, i) => {
+    const x = L + i * slot + (slot - bw) / 2;
+    const g = s('g', { class: 'col' });
+    let acc = 0;
+    const segs = TS_SERIES.filter(sr => b[sr.key] > 0);
+    segs.forEach((sr, si) => {
+      const v = b[sr.key];
+      const y0 = y(acc), y1 = y(acc + v);
+      const isTop = si === segs.length - 1;
+      const hgt = Math.max(1, y0 - y1 - (isTop ? 0 : 2));
+      append(g, s('rect', { class: 'm', x, y: y1, width: bw, height: hgt, rx: isTop ? 2 : 0, fill: sr.color }));
+      acc += v;
+    });
+    const hit = s('rect', { class: 'hit', x: L + i * slot, y: T, width: slot, height: ph });
+    const total = b.provider + b.cache + b.error;
+    hit.addEventListener('mousemove', e => showTip(e, `${fmtB(b.t)}–${fmtB(b.t + bucket)}`,
+      [`${total} request${total === 1 ? '' : 's'}`, ...TS_SERIES.map(sr => `${sr.label}: ${b[sr.key]}`)]));
+    hit.addEventListener('mouseleave', hideTip);
+    append(svg, [g, hit]);
+    if (i % 6 === 0) append(svg, s('text', { x: x + bw / 2, y: H - 6, 'text-anchor': 'middle' }, fmtB(b.t)));
+  });
+  mount('chart-ts', svg);
+}
+
+function renderLatency(M) {
+  const rows = Object.entries(M.providers)
+    .filter(([, p]) => isNum(p.avgLatencyMs))
+    .map(([n, p]) => ({ n, avg: p.avgLatencyMs, p95: isNum(p.p95LatencyMs) ? p.p95LatencyMs : null, req: p.requests }))
+    .sort((a, b) => a.avg - b.avg);
+  if (!rows.length) { mount('chart-lat', h('div', { class: 'empty' }, 'No successful provider calls yet.')); return; }
+  const W = 560, rowH = 26, L = 92, R = 60, T = 4, H = T + rows.length * rowH + 18, pw = W - L - R;
+  const max = Math.max(...rows.map(r => Math.max(r.avg, r.p95 || 0)), 1);
+  const step = niceStep(max, 4), top = Math.ceil(max / step) * step;
+  const x = v => L + (v / top) * pw;
+  const svg = s('svg', { class: 'chart-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Average latency by provider' });
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    append(svg, [s('line', { class: v === 0 ? 'base' : 'gl', x1: x(v), x2: x(v), y1: T, y2: H - 16 }),
+      s('text', { x: x(v), y: H - 4, 'text-anchor': 'middle' }, fmtMs(v))]);
+  }
+  rows.forEach((r, i) => {
+    const yy = T + i * rowH + 6, bh = rowH - 12;
+    const g = s('g', null,
+      s('text', { x: L - 8, y: yy + bh / 2 + 3.5, 'text-anchor': 'end', style: 'fill:var(--text-2);font-size:11px' }, r.n),
+      s('rect', { x: L, y: yy, width: Math.max(2, x(r.avg) - L), height: bh, rx: 3, fill: 'var(--s-provider)' }),
+      r.p95 !== null ? s('line', { x1: x(r.p95), x2: x(r.p95), y1: yy - 3, y2: yy + bh + 3, stroke: 'var(--text-2)', 'stroke-width': 2 }) : null,
+      s('text', { x: Math.max(x(r.avg), r.p95 !== null ? x(r.p95) : 0) + 6, y: yy + bh / 2 + 3.5 }, fmtMs(r.avg)),
+      s('rect', { class: 'hit', x: 0, y: yy - 6, width: W, height: rowH }));
+    g.addEventListener('mousemove', e => showTip(e, r.n, [`avg ${fmtMs(r.avg)}`, `p95 ${fmtMs(r.p95)}`, `${fmtInt(r.req)} attempts`]));
+    g.addEventListener('mouseleave', hideTip);
+    append(svg, g);
+  });
+  mount('chart-lat', svg);
+}
+
+/* =========================================================
+   Cache panel
+   ========================================================= */
+function renderCache(M) {
+  const c = M.cache;
+  if (!Object.keys(c).length) { mount('cache', h('div', { class: 'empty' }, 'Cache stats not reported.')); return; }
+  const lookups = num(c.requests), hits = num(c.hits), checks = num(c.verifications), rejected = num(c.rejections);
+  const verified = Math.max(0, checks - rejected - num(c.verifyErrors));
+  const steps = [
+    ['Lookups', lookups, 'var(--s-provider)', 'Requests that checked the cache'],
+    ['Hits', hits, 'var(--s-cache)', 'Served from cache'],
+    ['Verified', verified, 'var(--s-cache)', 'Near matches confirmed by the verifier model'],
+    ['Rejected', rejected, 'var(--crit)', 'Near matches blocked by the verifier (wrong answer avoided)']
+  ];
+  const max = Math.max(1, lookups);
+  const funnel = h('div', { class: 'funnel' }, steps.map(([k, v, col, title]) =>
+    h('div', { class: 'frow', title },
+      h('span', { class: 'muted' }, k),
+      h('div', { class: 'track' }, v ? h('i', { style: `width:${(v / max) * 100}%;background:${col}` }) : null),
+      h('span', { class: 'num', style: 'text-align:right' }, fmtInt(v)))));
+
+  const threshold = isNum(c.threshold) ? c.threshold : M.config.cacheThreshold;
+  const trust = isNum(c.trustAbove) ? c.trustAbove : M.config.cacheTrustAbove;
+  const verifyOn = typeof c.verifyEnabled === 'boolean' ? c.verifyEnabled : M.config.cacheVerify;
+  const kv = (k, v, title) => h('div', { title: title || null }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
+  const grid = h('div', { class: 'kvgrid' },
+    kv('Hit rate', fmtPct(c.hitRate)),
+    kv('Entries', fmtInt(c.entries)),
+    kv('Similarity threshold', isNum(threshold) ? threshold.toFixed(3) : DASH, 'Minimum cosine similarity for a candidate match'),
+    kv('Trust above', isNum(trust) ? trust.toFixed(3) : DASH, 'Matches above this skip verification'),
+    kv('Verification', typeof verifyOn === 'boolean' ? (verifyOn ? 'on' : 'off') : DASH),
+    kv('Tokens saved', fmtInt(c.tokensSaved)),
+    kv('Embed calls', fmtInt(c.embedCalls)),
+    kv('Embed memo hits', fmtInt(c.embedMemoHits), 'Embeddings reused from memory instead of a new API call'),
+    kv('Embed errors', fmtInt(c.embedErrors)),
+    kv('Bypassed (time-sensitive)', fmtInt(c.bypassedTimeSensitive), 'Prompts like "today’s weather" that skip the cache'),
+    kv('Verify errors', fmtInt(c.verifyErrors)),
+    kv('Skipped (unavailable)', fmtInt(c.skippedUnavailable)));
+
+  const spent = M.kpi.spent, verifyCost = isNum(c.verifyCost) ? c.verifyCost : null, embedCost = isNum(c.embedCost) ? c.embedCost : null;
+  const chatCost = isNum(spent) ? Math.max(0, spent - num(verifyCost)) : null;
+  const tr = (k, v, cls) => h('tr', { class: cls || null }, h('td', null, k), h('td', { class: 'right num' }, v));
+  const costs = h('table', { class: 'costtable' }, h('tbody', null,
+    tr('Chat completions', fmtUsd(chatCost)),
+    tr('Cache verification', fmtUsd(verifyCost)),
+    tr('Embeddings', fmtUsd(embedCost)),
+    tr('Gross saved by cache', fmtUsd(isNum(c.costSaved) ? c.costSaved : null)),
+    tr('Net saved', fmtUsd(M.kpi.netSaved), 'total')));
+  mount('cache', funnel, grid, costs,
+    h('p', { class: 'note' }, 'Costs are list-price estimates (tokens × published per-token price), not invoices. Free-tier providers may bill $0. Net = gross saved − verification − embedding cost.'));
+}
+
+/* =========================================================
+   Request log
+   ========================================================= */
+const OUTCOME = {
+  ok: ['ok', '✓'], timeout: ['fail', '✕ timeout'], error: ['fail', '✕'], rate_limited: ['rl', '✕ 429'], skipped: ['skip', 'skipped']
+};
+function attemptChip(a) {
+  const [cls, mark] = OUTCOME[a.outcome] || OUTCOME.error;
+  const detail = a.outcome === 'ok' ? fmtMs(a.latencyMs) : (a.outcome === 'error' && a.httpStatus ? String(a.httpStatus) : (a.outcome === 'timeout' ? fmtMs(a.latencyMs) : ''));
+  const label = [a.provider, mark, detail !== DASH ? detail : ''].filter(Boolean).join(' ');
+  const title = [a.provider + (a.model ? ' / ' + a.model : ''), a.outcome, a.httpStatus ? 'HTTP ' + a.httpStatus : '', isNum(a.latencyMs) ? fmtMs(a.latencyMs) : '', a.error || ''].filter(Boolean).join(' · ');
+  return h('span', { class: 'chip ' + cls, title }, label);
+}
+function chainEl(r) {
+  if (isCacheRow(r)) return h('div', { class: 'chain' }, h('span', { class: 'chip ok' }, 'cache ✓' + (isNum(r.similarity) ? ' ' + r.similarity.toFixed(3) : '')));
+  const { list } = rowAttempts(r);
+  if (!list.length) return h('span', { class: 'muted' }, r.status === 'queued' ? 'queued' : DASH);
+  const kids = [];
+  list.forEach((a, i) => { if (i) kids.push(h('span', { class: 'arrow' }, '→')); kids.push(attemptChip(a)); });
+  return h('div', { class: 'chain' }, kids);
+}
+function cacheBadge(r) {
+  if (isCacheRow(r)) return r.verified === true ? h('span', { class: 'badge good' }, 'verified') : h('span', { class: 'badge good' }, 'hit');
+  if (r.verification === 'rejected') return h('span', { class: 'badge crit', title: isNum(r.nearSimilarity) ? 'near match ' + r.nearSimilarity.toFixed(3) + ' rejected' : 'near match rejected' }, 'rejected');
+  if (r.verification === 'failed') return h('span', { class: 'badge warn' }, 'check failed');
+  return h('span', { class: 'muted' }, DASH);
+}
+function routeBadges(r) {
+  if (!r.route) return h('span', { class: 'muted' }, DASH);
+  const tierCls = { light: 'good', standard: 'info', heavy: 'serious' }[r.route.tier] || '';
+  return h('div', { class: 'chain' },
+    r.route.tier ? h('span', { class: 'badge ' + tierCls }, r.route.tier) : null,
+    r.route.task ? h('span', { class: 'badge outline' }, r.route.task) : null,
+    r.route.override ? h('span', { class: 'badge warn', title: 'Route overridden by request' }, 'override') : null);
+}
+function finalProvider(r) {
+  if (isCacheRow(r)) return 'cache';
+  if (isErrorRow(r)) return 'none';
+  return r.provider || DASH;
+}
+
+function matchesFilter(r) {
+  if (state.filter === 'cache' && !isCacheRow(r)) return false;
+  if (state.filter === 'failover' && !isFailoverRow(r)) return false;
+  if (state.filter === 'error' && !isErrorRow(r)) return false;
+  if (state.providerFilter) {
+    const p = state.providerFilter;
+    if (r.provider !== p && !rowAttempts(r).list.some(a => a.provider === p)) return false;
+  }
+  return true;
+}
+
+function detailRow(r) {
+  const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v === null || v === undefined || v === '' ? DASH : String(v)));
+  const route = r.route || {};
+  const { list, derived } = rowAttempts(r);
+  const attempts = list.length ? h('table', { class: 'attempts' },
+    h('thead', null, h('tr', null, ['#', 'Provider', 'Model', 'Outcome', 'HTTP', 'Latency', 'Error'].map(t => h('th', null, t)))),
+    h('tbody', null, list.map((a, i) => h('tr', null,
+      h('td', null, String(i + 1)), h('td', null, a.provider || DASH), h('td', { class: 'mono' }, a.model || DASH),
+      h('td', null, h('span', { class: 'badge ' + (a.outcome === 'ok' ? 'good' : a.outcome === 'rate_limited' ? 'warn' : 'crit') }, a.outcome || 'error')),
+      h('td', { class: 'num' }, a.httpStatus ? String(a.httpStatus) : DASH), h('td', { class: 'num' }, fmtMs(a.latencyMs)),
+      h('td', { style: 'word-break:break-word' }, a.error || DASH)))))
+    : null;
+  return h('tr', { class: 'detail' }, h('td', { colspan: 9 },
+    h('div', { class: 'detail-grid' },
+      kv('Prompt', r.prompt),
+      kv('Time', r.time ? new Date(r.time).toLocaleString() : null),
+      kv('Status', r.status),
+      kv('Final provider / model', `${finalProvider(r)}${r.model ? ' / ' + r.model : ''}`),
+      kv('Route reason', route.reason),
+      kv('Policy', route.policy),
+      kv('Est. tokens / score', route.estTokens !== undefined ? `${route.estTokens}${isNum(route.score) ? ' / ' + route.score.toFixed(2) : ''}` : null),
+      kv('Similarity', isNum(r.similarity) ? r.similarity.toFixed(4) : null),
+      kv('Near-match rejected at', isNum(r.nearSimilarity) ? r.nearSimilarity.toFixed(4) : null),
+      kv('Cost / verify / embed', `${fmtUsd(num(r.cost))} / ${fmtUsd(num(r.verifyCost))} / ${fmtUsd(num(r.embedCost))}`),
+      kv('Saved', isNum(r.savedCost) ? fmtUsd(r.savedCost) : null),
+      kv('Skipped providers', (r.skippedProviders || []).join(', '))),
+    attempts ? h('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px' }, derived ? 'Attempts (reconstructed from failed providers; detail not reported)' : 'Attempts') : null,
+    attempts));
+}
+
+function renderLog(M) {
+  const rows = M.recent.filter(matchesFilter);
+  $('log-count').textContent = `${rows.length} of ${M.recent.length} requests`;
+  if (!rows.length) { mount('log', h('div', { class: 'empty' }, M.recent.length ? 'No requests match this filter.' : 'No requests yet. Use the playground below to send one.')); return; }
+  const tbody = h('tbody');
+  for (const r of rows.slice(0, 100)) {
+    const key = rowKey(r);
+    const open = state.expanded.has(key);
+    const toggle = () => { if (state.expanded.has(key)) state.expanded.delete(key); else state.expanded.add(key); renderLog(state.model); };
+    const tokens = isCacheRow(r) ? (isNum(r.savedTokens) ? r.savedTokens : r.tokens) : r.tokens;
+    const tr = h('tr', { class: 'row' + (isErrorRow(r) ? ' err' : ''), tabindex: 0, 'aria-expanded': open ? 'true' : 'false',
+      onclick: toggle, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } } },
+      h('td', { class: 'num', title: r.time ? new Date(r.time).toLocaleString() : '' }, fmtTime(r.time)),
+      h('td', { class: 'prompt', title: r.prompt || '' }, r.prompt || DASH),
+      h('td', null, routeBadges(r)),
+      h('td', null, h('div', null, finalProvider(r)), r.model ? h('div', { class: 'muted mono', style: 'font-size:10.5px' }, truncate(r.model, 32)) : null),
+      h('td', null, chainEl(r)),
+      h('td', { class: 'right num' }, fmtMs(r.latencyMs)),
+      h('td', { class: 'right num' }, isNum(tokens) ? fmtInt(tokens) : DASH),
+      h('td', { class: 'right num', title: isCacheRow(r) && isNum(r.savedCost) ? 'saved ' + fmtUsd(r.savedCost) : '' },
+        isCacheRow(r) ? (isNum(r.savedCost) ? '−' + fmtUsd(r.savedCost).replace('-', '') : '$0.00') : fmtUsd(num(r.cost) + num(r.verifyCost))),
+      h('td', null, cacheBadge(r)));
+    tbody.appendChild(tr);
+    if (open) tbody.appendChild(detailRow(r));
+  }
+  mount('log', h('table', null,
+    h('thead', null, h('tr', null,
+      h('th', null, 'Time'), h('th', null, 'Prompt'), h('th', null, 'Route'), h('th', null, 'Provider'),
+      h('th', null, 'Attempts'), h('th', { class: 'right' }, 'Latency'), h('th', { class: 'right' }, 'Tokens'),
+      h('th', { class: 'right' }, 'Cost'), h('th', null, 'Cache'))),
+    tbody));
+}
+
+$('log-filter').addEventListener('click', e => {
+  const b = e.target.closest('button[data-f]');
+  if (!b) return;
+  state.filter = b.getAttribute('data-f');
+  $('log-filter').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+  if (state.model) renderLog(state.model);
+});
+$('log-provider').addEventListener('change', e => { state.providerFilter = e.target.value; if (state.model) renderLog(state.model); });
+
+/** Keep a <select> in sync with provider names without losing the user's selection. */
+function syncSelect(sel, names, firstLabel) {
+  const want = ['', ...names].join('|');
+  if (sel.getAttribute('data-keys') === want) return;
+  const cur = sel.value;
+  sel.replaceChildren(); append(sel, [h('option', { value: '' }, firstLabel), names.map(n => h('option', { value: n }, n))]);
+  sel.value = names.includes(cur) ? cur : '';
+  sel.setAttribute('data-keys', want);
+}
+
+/* =========================================================
+   Render all
+   ========================================================= */
+function safe(fn, M, name) {
+  try { fn(M); } catch (err) { console.warn('[dashboard] render ' + name + ' failed:', err); }
+}
+function ingest(data) {
+  const M = normalize(data);
+  state.model = M;
+  state.lastUpdate = Date.now();
+  safe(renderHeader, M, 'header');
+  safe(renderKpis, M, 'kpis');
+  safe(renderProviders, M, 'providers');
+  safe(renderRouting, M, 'routing');
+  safe(renderTimeseries, M, 'timeseries');
+  safe(renderLatency, M, 'latency');
+  safe(renderCache, M, 'cache');
+  safe(renderLog, M, 'log');
+  const names = Object.keys(M.providers).sort();
+  syncSelect($('log-provider'), names, 'All providers');
+  const usable = Object.entries(M.providers).filter(([, p]) => p.configured !== false && p.state !== 'unconfigured').map(([n]) => n).sort();
+  syncSelect($('pg-provider'), usable, 'Auto (smart routing)');
+  renderConn();
+}
+
+/* =========================================================
+   Live connection: WebSocket with polling fallback
+   ========================================================= */
+let ws = null, pollTimer = null, wsRetryTimer = null, pollFails = 0;
+
+async function pollOnce() {
+  try {
+    const res = await fetch('/v1/chat/live', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    pollFails = 0;
+    if (state.conn !== 'ws') state.conn = 'poll';
+    ingest(data);
+  } catch {
+    pollFails++;
+    if (state.conn !== 'ws' && pollFails >= 2) { state.conn = 'offline'; renderConn(); }
+  }
+}
+function startPolling() {
+  if (pollTimer) return;
+  pollOnce();
+  pollTimer = setInterval(pollOnce, 2000);
+}
+function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+
+function connectWs() {
+  clearTimeout(wsRetryTimer);
+  if (!('WebSocket' in window)) { startPolling(); return; }
+  let opened = false;
+  try {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/metrics');
+  } catch { startPolling(); wsRetryTimer = setTimeout(connectWs, 15000); return; }
+  ws.onopen = () => { opened = true; };
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (!msg || typeof msg !== 'object' || !msg.totals) return; // handshake or unrelated message
+    state.conn = 'ws';
+    stopPolling();
+    ingest(msg);
+  };
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    ws = null;
+    if (state.conn === 'ws') state.conn = 'poll';
+    startPolling();
+    wsRetryTimer = setTimeout(connectWs, opened ? 5000 : 15000);
+  };
+}
+
+/* =========================================================
+   Reset
+   ========================================================= */
+function banner(text, cls) {
+  const b = $('banner');
+  b.className = 'banner show ' + (cls || '');
+  b.textContent = text;
+  clearTimeout(banner.t);
+  banner.t = setTimeout(() => { b.className = 'banner'; }, 8000);
+}
+$('btn-reset').addEventListener('click', async () => {
+  if (!window.confirm('Reset all gateway data?\n\nThis clears the semantic cache, live stats, circuit breakers and the MongoDB request history.')) return;
+  const btn = $('btn-reset');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/v1/chat/reset', { method: 'POST' });
+    let data = {};
+    try { data = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok || data.ok === false) {
+      const msg = typeof data.error === 'string' ? data.error : (data.error && data.error.message) || ('HTTP ' + res.status);
+      throw new Error(msg);
+    }
+    state.expanded.clear();
+    banner(`Reset complete${isNum(data.deletedCount) ? ` · removed ${data.deletedCount} MongoDB records` : ''}.`, 'good');
+    pollOnce();
+  } catch (err) {
+    banner('Reset failed: ' + err.message, 'crit');
+  } finally { btn.disabled = false; }
+});
+
+/* =========================================================
+   Playground
+   ========================================================= */
+function pgResult(res, data, elapsed) {
+  const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v === null || v === undefined || v === '' ? DASH : v));
+  if (res.status === 202) {
+    return [h('div', { class: 'answer' }, 'Request queued: the rate limit bucket is empty. It will be processed when tokens refill.'),
+      data && data.jobId ? h('p', { class: 'note' }, 'Job id: ' + String(data.jobId)) : null];
+  }
+  if (!res.ok || (data && data.error)) {
+    const e = (data && data.error) || {};
+    const msg = typeof e === 'string' ? e : e.message || ('HTTP ' + res.status);
+    const parts = String(msg).split(/;\s+(?=[a-z0-9_-]+:)/i);
+    return [h('div', { class: 'answer err' },
+      h('b', null, `Error ${e.status || res.status}${e.type ? ' · ' + e.type : ''}`), '\n',
+      parts.length > 1 ? parts.join('\n') : msg),
+      Array.isArray(data && data.attempts) && data.attempts.length ? h('div', { style: 'margin-top:10px' }, chainEl({ attempts: data.attempts })) : null];
+  }
+  const answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
+  const rt = data.routing || {};
+  const cache = data.cache || {};
+  const usage = data.usage || {};
+  const isHit = cache.hit === true || data.provider === 'cache';
+  const chain = isHit ? chainEl({ provider: 'cache', cache: true, similarity: cache.similarity })
+    : Array.isArray(data.attempts) && data.attempts.length ? chainEl({ attempts: data.attempts }) : chainEl({ provider: data.provider, model: data.model, latencyMs: elapsed, status: 'ok' });
+  let cacheText = 'miss';
+  if (isHit) cacheText = `hit${isNum(cache.similarity) ? ' · similarity ' + cache.similarity.toFixed(4) : ''}${cache.verified ? ' · verified' : ''}${cache.original_provider ? ' · from ' + cache.original_provider : ''}`;
+  else if (isNum(cache.rejected_near_match)) cacheText = `miss · near match ${cache.rejected_near_match.toFixed(4)} rejected by verifier`;
+  else if (cache.bypassed || cache.bypass) cacheText = 'bypassed';
+  return [
+    h('div', { class: 'answer' }, answer || '(empty response)'),
+    h('div', { class: 'detail-grid', style: 'margin-top:12px' },
+      kv('Provider', data.provider),
+      kv('Model', data.model),
+      kv('Route', rt.tier || rt.task ? [rt.tier, rt.task].filter(Boolean).join(' · ') : null),
+      kv('Policy', rt.policy),
+      kv('Reason', rt.reason),
+      kv('Latency (client)', fmtMs(elapsed)),
+      kv('Tokens', isNum(usage.total_tokens) ? `${usage.total_tokens} (${num(usage.prompt_tokens)} in / ${num(usage.completion_tokens)} out)` : null),
+      kv('Cost', isHit ? `$0 · saved ${fmtUsd(num(cache.saved_cost))}` : fmtUsd(isNum(data.cost) ? data.cost : null)),
+      kv('Cache', cacheText)),
+    h('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px' }, 'Attempts'),
+    chain
+  ];
+}
+
+async function sendPrompt() {
+  const text = $('pg-prompt').value.trim();
+  if (!text) { $('pg-prompt').focus(); return; }
+  const btn = $('pg-send');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  mount('pg-out', h('div', { class: 'answer muted' }, 'Routing request through CortexGate…'));
+  const headers = { 'Content-Type': 'application/json' };
+  const body = { messages: [{ role: 'user', content: text }] };
+  if ($('pg-bypass').checked) headers['x-cache'] = 'bypass';
+  const policy = $('pg-policy').value;
+  if (policy) { headers['x-routing-policy'] = policy; body.routing_policy = policy; }
+  const prov = $('pg-provider').value;
+  if (prov) { headers['x-provider'] = prov; body.provider = prov; }
+  const t0 = performance.now();
+  try {
+    const res = await fetch('/v1/chat/completions', { method: 'POST', headers, body: JSON.stringify(body) });
+    let data = null;
+    const raw = await res.text();
+    try { data = JSON.parse(raw); } catch { data = { error: { message: raw.slice(0, 500) || 'Non-JSON response' } }; }
+    mount('pg-out', pgResult(res, data, performance.now() - t0));
+  } catch (err) {
+    mount('pg-out', h('div', { class: 'answer err' }, 'Network error: ' + err.message));
+  } finally {
+    btn.disabled = false; btn.textContent = 'Send request';
+    pollOnce();
+  }
+}
+$('pg-send').addEventListener('click', sendPrompt);
+$('pg-prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendPrompt(); } });
+
+/* =========================================================
+   Boot
+   ========================================================= */
+renderConn();
+pollOnce();
+connectWs();
+setInterval(tickCountdowns, 1000);
+setInterval(() => { if (state.lastUpdate && Date.now() - state.lastUpdate > 8000 && state.conn !== 'offline') { state.conn = 'offline'; renderConn(); startPolling(); } }, 3000);
 </script>
 </body>
 </html>
