@@ -1,4 +1,59 @@
+# CortexGate stack. Project name defaults to the folder name ("cortexgate"), which
+# keeps the existing cortexgate_redis / cortexgate_ollama containers and the
+# cortexgate_redis_data / cortexgate_ollama_data volumes.
+#
+#   docker compose up -d                      # gateway + worker + redis + ollama
+#   docker compose --profile mongo up -d      # ... plus a local MongoDB
+#   CORTEXGATE_PORT=3013 docker compose up -d # publish the gateway on another host port
+#
+# The gateway is published on 127.0.0.1 only. To expose it (VPS without a reverse
+# proxy), set CORTEXGATE_BIND=0.0.0.0 -- and ALWAYS keep CLIENT_AUTH=required and
+# set ADMIN_TOKEN in services/gateway/.env. See docs/DEPLOY.md.
+
+x-gateway-common: &gateway-common
+  build:
+    context: ./services/gateway
+  image: cortexgate-gateway:latest
+  restart: unless-stopped
+  env_file:
+    - path: ./services/gateway/.env
+      required: false
+  environment: &gateway-env
+    # Container-network addresses override whatever localhost URLs .env holds.
+    REDIS_URL: redis://redis:6379
+    OLLAMA_BASE_URL: http://ollama:11434/v1
+    DATA_DIR: /data
+    PORT: "3003"
+    NODE_ENV: production
+    # Host requests reach the container from the bridge IP (not loopback), so
+    # keys are required by default. Override with CLIENT_AUTH=off|auto at your own risk.
+    CLIENT_AUTH: ${CLIENT_AUTH:-required}
+  volumes:
+    - gateway_data:/data
+
 services:
+  gateway:
+    <<: *gateway-common
+    container_name: cortexgate_gateway
+    ports:
+      - "${CORTEXGATE_BIND:-127.0.0.1}:${CORTEXGATE_PORT:-3003}:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    # HEALTHCHECK (wget /health) comes from the Dockerfile.
+
+  worker:
+    <<: *gateway-common
+    container_name: cortexgate_worker
+    command: ["node", "src/workers/requestWorker.js"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
   redis:
     image: redis:7
     container_name: cortexgate_redis
@@ -7,6 +62,11 @@ services:
       - "6380:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   # Local LLM provider (free, no API key). Pull a model once:
   #   docker exec cortexgate_ollama ollama pull qwen2.5:0.5b
@@ -19,6 +79,25 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  # Optional local MongoDB (request logs). Start with --profile mongo and set
+  # MONGODB_URI=mongodb://mongo:27017/cortexgate in services/gateway/.env.
+  mongo:
+    image: mongo:7
+    container_name: cortexgate_mongo
+    profiles: ["mongo"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
   redis_data:
   ollama_data:
+  gateway_data:
+  mongo_data:

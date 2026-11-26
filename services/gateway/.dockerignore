@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log*
+data
+.env
+.env.*
+!.env.example
+test
+testRequest.js
+testRequest.mjs
+Dockerfile
+.dockerignore
+*.log
+.git
