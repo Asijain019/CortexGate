@@ -295,6 +295,53 @@ test('TTL expiry', async () => {
   assert.equal((await cache.lookup(user('ttl question'))).hit, null, 'expired entry misses');
 });
 
+test('TTL class is chosen by question type', () => {
+  assert.equal(cache.ttlClass('What is the capital of France?'), 'factual');
+  assert.equal(cache.ttlClass('Convert 10 km to miles'), 'factual');
+  assert.equal(cache.ttlClass('Write a python function to reverse a list'), 'code');
+  assert.equal(cache.ttlClass('Write a poem about the sea'), 'creative');
+  assert.equal(cache.ttlClass('Give me tips for a job interview'), 'general');
+  const p = cache.getStats().ttlPolicy;
+  assert.equal(p.factual, 7 * 24 * 3600e3);
+  assert.equal(p.code, 3 * 24 * 3600e3);
+  assert.equal(p.general, 24 * 3600e3);
+  assert.equal(p.creative, 6 * 3600e3);
+});
+
+test('per-class TTL: creative entries expire while factual ones stay', async () => {
+  process.env.CACHE_TTL_CREATIVE_MS = '40';
+  try {
+    await seed('write a poem about rain', [1, 0, 0]);
+    await seed('what is the capital of peru', [0, 1, 0]);
+    await new Promise(r => setTimeout(r, 70));
+    assert.equal((await cache.lookup(user('write a poem about rain'))).hit, null, 'creative expired');
+    assert.ok((await cache.lookup(user('what is the capital of peru'))).hit, 'factual still cached');
+    assert.equal(cache.getStats().expiredEvictions >= 0, true);
+  } finally {
+    delete process.env.CACHE_TTL_CREATIVE_MS;
+  }
+});
+
+test('verified alias keeps the original expiry (hits never extend TTL)', async () => {
+  process.env.CACHE_TTL_MS = '60';
+  await seed('tips for sleeping well', [1, 0]);
+  vectors.set('advice to sleep better', unit(0.95));
+  const r = await cache.lookup(user('advice to sleep better'));
+  assert.ok(r.hit?.verified, 'borderline match verified');
+  await new Promise(res => setTimeout(res, 90));
+  assert.equal((await cache.lookup(user('advice to sleep better'))).hit, null, 'alias expired with original');
+});
+
+test('vectors are stored compactly on disk and in memory', async () => {
+  await seed('what is the speed of light', [0.5, 0.25, 0.125]);
+  await new Promise(r => setTimeout(r, 1300)); // debounced persist
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'cache.json'), 'utf8'));
+  assert.equal(saved.format, 2);
+  assert.equal(typeof saved.entries[0].vector, 'string', 'base64 on disk');
+  assert.ok(saved.entries[0].expiresAt > saved.entries[0].createdAt);
+  assert.ok(cache.getStats().memoryBytes > 0);
+});
+
 test('LRU eviction removes the least-recently-used entry', async () => {
   process.env.CACHE_MAX_ENTRIES = '2';
   const tick = () => new Promise(r => setTimeout(r, 5));

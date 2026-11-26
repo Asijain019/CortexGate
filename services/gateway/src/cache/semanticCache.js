@@ -49,7 +49,9 @@ const ZERO_STATS = {
   skippedUnavailable: 0,    // embedder unavailable (cooldown, error, not configured)
   uncacheable: 0,           // multi-turn or empty prompts
   numericGuardMisses: 0,
-  negationGuarded: 0        // matches that could not be trusted because of a negation mismatch
+  negationGuarded: 0,       // matches that could not be trusted because of a negation mismatch
+  expiredEvictions: 0,      // entries removed because their TTL ran out
+  lruEvictions: 0           // entries removed because the cache was full
 };
 const stats = { ...ZERO_STATS };
 
@@ -60,15 +62,65 @@ const floatEnv = (name, def) => {
 const threshold = () => floatEnv('CACHE_THRESHOLD', 0.92);
 const trustAbove = () => floatEnv('CACHE_TRUST_ABOVE', 0.985);
 const verifyOn = () => (process.env.CACHE_VERIFY || 'true').toLowerCase() !== 'false';
-const ttlMs = () => floatEnv('CACHE_TTL_MS', 24 * 60 * 60 * 1000);
-const maxEntries = () => Math.max(1, Math.floor(floatEnv('CACHE_MAX_ENTRIES', 500)));
+const HOUR = 60 * 60 * 1000;
+const ttlMs = () => floatEnv('CACHE_TTL_MS', 24 * HOUR);
+const maxEntries = () => Math.max(1, Math.floor(floatEnv('CACHE_MAX_ENTRIES', 1000)));
+const sweepMs = () => floatEnv('CACHE_SWEEP_MS', 10 * 60 * 1000);
+
+// ---- TTL policy ----
+// Each entry gets a fixed expiry when it is stored, chosen by the kind of question.
+// Hits do NOT extend it, so every answer is refreshed from a provider at least once
+// per TTL. Time-sensitive prompts (news, weather, "today") are never cached at all.
+//   factual   evergreen facts, definitions, conversions  CACHE_TTL_FACTUAL_MS   7 days
+//   code      code / technical answers                   CACHE_TTL_CODE_MS      3 days
+//   general   everything else                            CACHE_TTL_MS           24 hours
+//   creative  stories, poems, jokes (variety expected)   CACHE_TTL_CREATIVE_MS  6 hours
+const TTL_CLASSES = {
+  factual: () => floatEnv('CACHE_TTL_FACTUAL_MS', 7 * 24 * HOUR),
+  code: () => floatEnv('CACHE_TTL_CODE_MS', 3 * 24 * HOUR),
+  general: ttlMs,
+  creative: () => floatEnv('CACHE_TTL_CREATIVE_MS', 6 * HOUR)
+};
+const CREATIVE_RE = /\b(story|poem|haiku|joke|limerick|song|lyrics|slogan|brainstorm|creative|imagine)\b/;
+const CODE_RE = /```|\b(code|function|class|bug|regex|sql|javascript|typescript|python|java|api|compile|algorithm|implement)\b/;
+const FACTUAL_RE = /^\s*(what|who|whom|which|where|when|define|definition of|meaning of|convert|how many|how much|how far|how tall|how old|is|are|was|were|does|did|name)\b/;
+export function ttlClass(text) {
+  const t = String(text || '').toLowerCase();
+  if (CREATIVE_RE.test(t)) return 'creative';
+  if (CODE_RE.test(t)) return 'code';
+  if (FACTUAL_RE.test(t)) return 'factual';
+  return 'general';
+}
+export function ttlFor(text) {
+  return TTL_CLASSES[ttlClass(text)]();
+}
+const expiryOf = e => e.expiresAt ?? (e.createdAt + ttlMs()); // entries saved before per-class TTLs
+const isExpired = (e, now) => now >= expiryOf(e);
+
+// ---- vector encoding ----
+// In memory: Float32Array (half the memory of JS number arrays, faster cosine scans).
+// On disk: base64 of the Float32 bytes (about 4x smaller than JSON number text).
+const toF32 = v => (v instanceof Float32Array ? v : Float32Array.from(v));
+function encodeVec(v) {
+  const f = toF32(v);
+  return Buffer.from(f.buffer, f.byteOffset, f.byteLength).toString('base64');
+}
+function decodeVec(saved) {
+  if (Array.isArray(saved)) return Float32Array.from(saved); // old JSON-array format
+  if (typeof saved === 'string') {
+    const buf = Buffer.from(saved, 'base64');
+    return new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  }
+  return null;
+}
 
 // ---- load from disk ----
 const savedCache = persist.load('cache', null);
 if (Array.isArray(savedCache?.entries)) {
   const now = Date.now();
   for (const e of savedCache.entries) {
-    if (now - e.createdAt <= ttlMs() && Array.isArray(e.vector)) entries.push(e);
+    const vector = decodeVec(e.vector);
+    if (vector && vector.length && !isExpired(e, now)) entries.push({ ...e, vector });
   }
   console.log(`[Cache] Restored ${entries.length} entries from disk`);
 }
@@ -77,9 +129,9 @@ if (Array.isArray(savedCache?.entries)) {
   for (const k of Object.keys(ZERO_STATS)) if (Number.isFinite(saved?.[k])) stats[k] = saved[k];
 }
 
-const round = v => v.map(x => Math.round(x * 1e5) / 1e5);
 const persistEntries = () => persist.save('cache', () => ({
-  entries: entries.map(e => ({ ...e, vector: round(e.vector) }))
+  format: 2,
+  entries: entries.map(e => ({ ...e, vector: encodeVec(e.vector) }))
 }), 1000);
 const persistStats = () => persist.save('cache-stats', () => stats, 500);
 
@@ -171,12 +223,20 @@ export function sameNumbers(a, b) {
 // ---- entries ----
 
 function purgeExpired(now = Date.now()) {
-  const ttl = ttlMs();
   let removed = 0;
   for (let i = entries.length - 1; i >= 0; i--) {
-    if (now - entries[i].createdAt > ttl) { entries.splice(i, 1); removed++; }
+    if (isExpired(entries[i], now)) { entries.splice(i, 1); removed++; }
   }
+  if (removed) stats.expiredEvictions += removed;
   return removed;
+}
+
+// Background sweep so expired entries free memory even when nothing new is stored.
+if (sweepMs() > 0) {
+  const timer = setInterval(() => {
+    if (purgeExpired()) { persistEntries(); persistStats(); }
+  }, sweepMs());
+  timer.unref?.();
 }
 
 // Insert, replacing an existing entry with the same namespace + prompt, and
@@ -189,8 +249,9 @@ function insertEntry(entry) {
     let idx = 0;
     for (let i = 1; i < entries.length; i++) if (entries[i].lastUsed < entries[idx].lastUsed) idx = i;
     entries.splice(idx, 1);
+    stats.lruEvictions++;
   }
-  entries.push(entry);
+  entries.push({ ...entry, vector: toF32(entry.vector) });
   persistEntries();
 }
 
@@ -248,7 +309,7 @@ export async function lookup(messages) {
     let best = null;
     let bestScore = -1;
     for (const e of entries) {
-      if (e.namespace !== namespace || now - e.createdAt > ttlMs()) continue;
+      if (e.namespace !== namespace || isExpired(e, now)) continue;
       const score = cosineSimilarity(vector, e.vector);
       if (score > bestScore) { bestScore = score; best = e; }
     }
@@ -288,7 +349,8 @@ export async function lookup(messages) {
 
     if (v.same === true) {
       // Remember the new wording so next time it is an exact (trusted) match.
-      insertEntry({ ...best, prompt: text, vector, createdAt: now, lastUsed: now, alias: true });
+      // The alias keeps the original's expiry, so aliasing never extends an answer's life.
+      insertEntry({ ...best, prompt: text, vector, createdAt: now, expiresAt: expiryOf(best), lastUsed: now, alias: true });
       return registerHit(true, verifyCost);
     }
     if (v.same === false) {
@@ -311,9 +373,11 @@ export function store({ vector, key, response, cost, provider }) {
     if (!vector || !key || !response) return;
     if (isTimeSensitive(key.text)) return; // defensive: lookup() already returns key=null for these
     const now = Date.now();
+    const kind = ttlClass(key.text);
     insertEntry({
       namespace: key.namespace, prompt: key.text, vector,
-      response, cost: Number(cost) || 0, provider, createdAt: now, lastUsed: now
+      response, cost: Number(cost) || 0, provider,
+      createdAt: now, expiresAt: now + TTL_CLASSES[kind](), ttlClass: kind, lastUsed: now
     });
   } catch (err) {
     console.warn(`[Cache] Store failed: ${err.message}`);
@@ -331,6 +395,13 @@ export function getStats() {
     netSaved,
     netCostSaved: netSaved,          // legacy name
     entries: entries.length,
+    maxEntries: maxEntries(),
+    // Rough in-memory footprint: Float32 vector + answer/prompt text (UTF-16) + bookkeeping.
+    memoryBytes: entries.reduce((n, e) => n + (e.vector?.byteLength || 0)
+      + 2 * (String(e.response?.content || '').length + String(e.prompt || '').length) + 200, 0),
+    ttlPolicy: Object.fromEntries(Object.entries(TTL_CLASSES).map(([k, f]) => [k, f()])),
+    entriesByTtlClass: entries.reduce((m, e) => { const k = e.ttlClass || 'general'; m[k] = (m[k] || 0) + 1; return m; }, {}),
+    nextExpiryAt: entries.length ? new Date(Math.min(...entries.map(expiryOf))).toISOString() : null,
     threshold: threshold(),
     trustAbove: trustAbove(),
     verifyEnabled: verifyOn(),
