@@ -16,7 +16,7 @@ export const BUILTIN_KEYS = {
   nvidia: { label: 'NVIDIA NIM', keyEnv: ['NVIDIA_API_KEY', 'NVDIA_API_KEY'] },
   gemini: { label: 'Google Gemini', keyEnv: ['GEMINI_API_KEY'] },
   cerebras: { label: 'Cerebras', keyEnv: ['CEREBRAS_API_KEY'] },
-  cloudflare: { label: 'Cloudflare Workers AI', keyEnv: ['CLOUDFLARE_API_TOKEN'], accountEnv: ['CLOUDFLARE_ACCOUNT_ID'] },
+  cloudflare: { label: 'Cloudflare Workers AI', keyEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY'], accountEnv: ['CLOUDFLARE_ACCOUNT_ID'] },
   cohere: { label: 'Cohere', keyEnv: ['COHERE_API_KEY'] },
   together: { label: 'Together AI', keyEnv: ['TOGETHER_API_KEY'] },
   sambanova: { label: 'SambaNova', keyEnv: ['SAMBANOVA_API_KEY'] },

@@ -45,7 +45,7 @@ export const PROBES = {
   huggingface: { url: 'https://huggingface.co/api/whoami-v2', keyEnv: ['HUGGINGFACE_API_KEY', 'HF_TOKEN'] },
   github: { url: 'https://models.github.ai/catalog/models', keyEnv: ['GITHUB_TOKEN'] },
   cerebras: { url: 'https://api.cerebras.ai/v1/models', keyEnv: ['CEREBRAS_API_KEY'] },
-  cloudflare: { url: 'https://api.cloudflare.com/client/v4/user/tokens/verify', keyEnv: ['CLOUDFLARE_API_TOKEN'] },
+  cloudflare: { url: 'https://api.cloudflare.com/client/v4/user/tokens/verify', keyEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY'] },
   cohere: { url: 'https://api.cohere.com/v1/models?page_size=1', keyEnv: ['COHERE_API_KEY'] },
   ollama: { url: () => `${ollamaBase()}/models`, keyEnv: [], auth: 'none' }
 };
