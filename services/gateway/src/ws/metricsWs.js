@@ -1,14 +1,20 @@
 import { WebSocketServer } from 'ws';
 import { buildLivePayload } from '../gateway/liveStatus.js';
+import { wsAllowed } from '../middleware/clientAuth.js';
 
 const INTERVAL_MS = 2000;
 
 /**
  * WebSocket server streaming the same JSON as GET /v1/chat/live.
  * One shared 2s broadcast timer for all clients (idle when nobody is connected).
+ * Auth (unless CLIENT_AUTH=off): local same-origin connection, or ?token=<ADMIN_TOKEN>.
  */
 export function initWs(server) {
-  const wss = new WebSocketServer({ server, path: '/ws/metrics' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws/metrics',
+    verifyClient: (info, done) => (wsAllowed(info.req) ? done(true) : done(false, 401, 'Unauthorized'))
+  });
   console.log(`WebSocket metrics server listening on ws://localhost:${process.env.PORT || 3001}/ws/metrics`);
 
   let busy = false;

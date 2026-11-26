@@ -156,7 +156,7 @@ button, a, input, select, .tile, .nav a { transition: background-color .15s ease
 .seg button { border: 0; background: transparent; padding: 0 10px; height: 24px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); }
 .seg button:hover { color: var(--text); }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border-strong), 0 1px 2px rgba(0,0,0,.08); }
-select, input[type=text], input[type=password], input[type=url], input[type=number], input[type=search] { height: 30px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); padding: 0 10px; font-size: 12.5px; min-width: 0; }
+select, input[type=text], input[type=password], input[type=url], input[type=number], input[type=search], input[type=date] { height: 30px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); padding: 0 10px; font-size: 12.5px; min-width: 0; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 textarea { width: 100%; min-height: 110px; resize: vertical; border-radius: var(--r-2); border: 1px solid var(--border-strong); background: var(--surface-2); padding: 12px; font-size: 13.5px; line-height: 1.55; }
 .switch { position: relative; display: inline-block; width: 32px; height: 18px; flex: none; }
@@ -420,6 +420,12 @@ details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); dis
 .preset-note { font-size: 12px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-2); padding: 10px 12px; display: grid; gap: 6px; }
 .token-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .token-row input { width: 300px; max-width: 100%; }
+.keybox { display: flex; gap: var(--sp-2); align-items: center; }
+.keybox input { flex: 1; font-family: var(--mono); height: 34px; min-width: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+.checks label { display: inline-flex; align-items: center; gap: 6px; }
+.budget { min-width: 110px; }
+.budget .bar { margin-top: 4px; }
 @media (max-width: 600px) { .form .row2 { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
@@ -458,6 +464,7 @@ details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); dis
         <div class="pills" aria-live="polite">
           <span class="pill" id="pill-conn" title="Live metrics connection"><i class="dot"></i><span>Connecting…</span></span>
           <span class="pill" id="pill-policy" title="Active routing policy">Policy <b>—</b></span>
+          <span class="pill" id="pill-auth" title="Client API key mode (CLIENT_AUTH)"><i class="dot"></i>Auth <b>—</b></span>
           <span class="pill" id="pill-redis" title="Redis (rate limiting / queue)"><i class="dot"></i>Redis <b>—</b></span>
           <span class="pill" id="pill-mongo" title="MongoDB request history"><i class="dot"></i>Mongo <b>—</b></span>
         </div>
@@ -574,6 +581,8 @@ details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); dis
               <select id="pg-downgrade"><option value="">Policy</option><option value="true">Allow</option><option value="false">Never</option></select>
             </label>
             <label class="check"><input type="checkbox" id="pg-bypass"> Bypass cache</label>
+            <label title="Client API key, sent as Authorization: Bearer. Stored in this tab only (sessionStorage). Optional on localhost unless CLIENT_AUTH=required.">API key
+              <input type="password" id="pg-key" placeholder="cg-…" autocomplete="off" spellcheck="false" style="width:170px"></label>
             <span style="margin-left:auto" class="muted small"><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span></span>
             <button class="btn primary" id="pg-send" type="button">Send</button>
           </div>
@@ -592,6 +601,10 @@ details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); dis
             <span class="muted small" id="admin-token-state"></span>
           </div>
         </div>
+        <div class="section-title"><h2>API keys<i class="ii" title="Client keys for apps calling CortexGate (Authorization: Bearer cg-…). Only a hash is stored; the key is shown once at creation.">i</i></h2>
+          <span class="muted small" id="keys-mode"></span>
+          <button class="btn primary sm" id="btn-add-key" type="button" style="margin-left:auto">Create key</button></div>
+        <div class="card flush"><div id="set-keys"></div></div>
         <div class="section-title"><h2>Built-in providers<i class="ii" title="Keys saved here are encrypted at rest and override .env. Keys are never shown in full; removing a dashboard key falls back to .env.">i</i></h2></div>
         <div class="card flush"><div id="set-builtin"></div></div>
         <div class="section-title"><h2>Custom providers<i class="ii" title="Any OpenAI-compatible endpoint, routed alongside built-ins">i</i></h2>
@@ -827,7 +840,8 @@ const state = {
   history: [], colorMap: {}, sort: {}, tests: {}, hidden: {}, rtExpanded: new Set(),
   range: RANGES.includes(store('cortex-range')) ? store('cortex-range') : '1h',
   an: { status: 'idle', data: null, error: null, seq: 0 },
-  admin: { status: 'idle', data: null, error: null }
+  admin: { status: 'idle', data: null, error: null },
+  keys: { status: 'idle', data: null, error: null }
 };
 
 /* Categorical colors follow the entity: first-seen provider keeps its slot. Cache is always aqua. */
@@ -863,6 +877,10 @@ function renderHeader(M) {
     setPill('pill-redis', ok ? 'good' : 'warn', 'Redis', ok ? 'connected' : rl.redis,
       ok ? `Rate limit ${rl.enabled === false ? 'disabled' : `${fmtInt(rl.maxTokens)} req / ${fmtInt(rl.windowSec)}s`}` : 'Redis unavailable: rate limiting fails open');
   } else setPill('pill-redis', '', 'Redis', DASH, 'Redis status not reported by this gateway version');
+  const am = M.config.authMode;
+  if (am) setPill('pill-auth', am === 'off' ? 'crit' : 'good', 'Auth', am,
+    am === 'required' ? 'Client API key required on every request' : am === 'auto' ? 'Client API key required except from localhost' : 'No client authentication (CLIENT_AUTH=off)');
+  else setPill('pill-auth', '', 'Auth', DASH);
   const mongo = M.persistence.mongodb;
   if (mongo) setPill('pill-mongo', mongo === 'connected' ? 'good' : mongo === 'degraded' ? 'warn' : 'crit', 'Mongo', mongo, 'History source: ' + (M.persistence.historySource || DASH));
   else setPill('pill-mongo', '', 'Mongo', DASH);
@@ -1606,7 +1624,7 @@ async function loadAnalytics(showSpinner) {
   const seq = ++state.an.seq, range = state.range;
   if (showSpinner || !state.an.data) { state.an.status = 'loading'; renderAnalytics(); }
   try {
-    const res = await fetch('/v1/analytics?range=' + encodeURIComponent(range), { cache: 'no-store' });
+    const res = await fetch('/v1/analytics?range=' + encodeURIComponent(range), { cache: 'no-store', headers: monHeaders() });
     if (seq !== state.an.seq) return;
     if (res.status === 404) { state.an = { ...state.an, status: 'unavailable', data: null }; renderAnalytics(); return; }
     let data = null;
@@ -1805,6 +1823,8 @@ function anSavings(D) {
    ADMIN API + SETTINGS
    ========================================================= */
 const TOKEN_KEY = 'cortex-admin-token';
+/** Monitoring endpoints accept localhost or the admin token. */
+function monHeaders() { const t = sess(TOKEN_KEY); return t ? { 'x-admin-token': t } : {}; }
 async function adminFetch(method, path, body) {
   const headers = { Accept: 'application/json' };
   const tok = sess(TOKEN_KEY);
@@ -1824,6 +1844,7 @@ async function adminFetch(method, path, body) {
   } catch (err) { return { ok: false, status: 0, data: null, message: 'Network error: ' + err.message }; }
 }
 async function loadAdmin() {
+  loadKeys();
   if (!state.admin.data) { state.admin.status = 'loading'; renderSettings(); }
   const r = await adminFetch('GET', '/v1/admin/providers');
   if (r.ok && r.data && typeof r.data === 'object') state.admin = { status: 'ok', data: r.data, error: null, code: 200 };
@@ -1838,9 +1859,9 @@ $('admin-token-save').addEventListener('click', () => {
   const v = $('admin-token').value.trim();
   if (!v) { $('admin-token').focus(); return; }
   sess(TOKEN_KEY, v); $('admin-token').value = '';
-  renderTokenState(); banner('Token saved', 'good'); loadAdmin();
+  renderTokenState(); banner('Token saved', 'good'); loadAdmin(); reconnectLive();
 });
-$('admin-token-clear').addEventListener('click', () => { sess(TOKEN_KEY, null); $('admin-token').value = ''; renderTokenState(); loadAdmin(); });
+$('admin-token-clear').addEventListener('click', () => { sess(TOKEN_KEY, null); $('admin-token').value = ''; renderTokenState(); loadAdmin(); reconnectLive(); });
 $('admin-token').addEventListener('keydown', e => { if (e.key === 'Enter') $('admin-token-save').click(); });
 
 function adminErrorBox(msg, code) {
@@ -1917,6 +1938,163 @@ async function deleteCustom(c) {
   if (r.ok) { banner(`Deleted ${c.name}.`, 'good'); delete state.tests[c.name]; } else banner(r.message, 'crit');
   loadAdmin();
 }
+
+/* ---------- Client API keys ---------- */
+const PG_KEY = 'cortex-client-key';
+async function loadKeys() {
+  if (!state.keys.data) { state.keys.status = 'loading'; renderKeys(); }
+  const r = await adminFetch('GET', '/v1/admin/keys');
+  if (r.ok && r.data && Array.isArray(r.data.keys)) state.keys = { status: 'ok', data: r.data, error: null, code: 200 };
+  else state.keys = { status: 'error', data: null, error: r.message, code: r.status };
+  renderKeys();
+}
+const AUTH_TEXT = { required: 'key required for every request', auto: 'key required except from localhost', off: 'client auth off' };
+function limitText(k) {
+  const parts = [];
+  if (k.rpmLimit) parts.push(fmtInt(k.rpmLimit) + ' RPM');
+  if (k.tpmLimit) parts.push(fmtCompact(k.tpmLimit) + ' TPM');
+  return parts.length ? parts.join(' · ') : 'none';
+}
+function budgetEl(k) {
+  const spend = num(k.spendUsd);
+  if (!isNum(k.budgetUsd)) return h('div', { class: 'budget num' }, fmtUsd(spend), h('div', { class: 'muted small' }, 'no budget'));
+  const pct = k.budgetUsd > 0 ? Math.min(1, spend / k.budgetUsd) : 1;
+  return h('div', { class: 'budget num', title: `${fmtUsd(spend)} of ${fmtUsd(k.budgetUsd)} spent` },
+    `${fmtUsd(spend)} / ${fmtUsd(k.budgetUsd)}`,
+    h('div', { class: 'bar' }, h('i', { class: pct >= 1 ? 'crit' : pct >= 0.8 ? 'warn' : null, style: `width:${(pct * 100).toFixed(1)}%` })));
+}
+function keyStatus(k) {
+  if (!k.enabled) return h('span', { class: 'badge outline' }, 'Disabled');
+  if (k.expired) return h('span', { class: 'badge crit dotted' }, 'Expired');
+  if (isNum(k.budgetUsd) && num(k.spendUsd) >= k.budgetUsd) return h('span', { class: 'badge crit dotted' }, 'Budget used');
+  return h('span', { class: 'badge good dotted' }, 'Active');
+}
+function renderKeys() {
+  const K = state.keys;
+  $('btn-add-key').disabled = K.status !== 'ok';
+  const mode = K.data && K.data.authMode;
+  $('keys-mode').textContent = mode ? `${mode} · ${AUTH_TEXT[mode] || ''}` : '';
+  if (K.status === 'loading' || K.status === 'idle') { mount('set-keys', loading()); return; }
+  if (K.status === 'error') { mount('set-keys', adminErrorBox(K.error, K.code)); return; }
+  const keys = K.data.keys;
+  if (!keys.length) { mount('set-keys', empty('No API keys', mode === 'auto' ? 'Localhost works without a key; remote clients need one.' : 'Create a key for your apps.', 'lock')); return; }
+  mount('set-keys', h('div', { class: 'table-wrap' }, h('table', null,
+    h('thead', null, h('tr', null, ['Enabled', 'Name', 'Key', 'Status', 'Limits', 'Spend / budget', 'Usage', 'Last used', ''].map((t, i) => h('th', { class: i === 8 ? 'right' : i === 6 ? 'num' : null }, t)))),
+    h('tbody', null, keys.map(k => h('tr', null,
+      h('td', null, h('label', { class: 'switch', title: k.enabled ? 'Disable' : 'Enable' },
+        h('input', { type: 'checkbox', 'data-fk': 'ken-' + k.id, checked: k.enabled ? true : null, 'aria-label': `Enable ${k.name}`, onchange: e => patchKey(k, { enabled: e.target.checked }) }), h('i'))),
+      h('td', null, h('div', { style: 'font-weight:500' }, k.name), h('div', { class: 'muted small mono' }, k.id)),
+      h('td', { class: 'mono' }, k.keyHint || DASH),
+      h('td', null, keyStatus(k), k.expiresAt ? h('div', { class: 'muted small', title: k.expiresAt }, (k.expired ? 'expired ' : 'expires ') + new Date(k.expiresAt).toLocaleDateString()) : null),
+      h('td', { class: 'small' }, limitText(k),
+        k.allowedProviders ? h('div', { class: 'muted small', title: k.allowedProviders.join(', ') }, truncate(k.allowedProviders.join(', '), 32)) : null,
+        k.allowedPolicies ? h('div', { class: 'muted small' }, 'policy ' + k.allowedPolicies.join(', ')) : null),
+      h('td', null, budgetEl(k)),
+      h('td', { class: 'num small' }, `${fmtInt(k.requests)} req`, h('div', { class: 'muted small' }, `${fmtCompact(k.tokens)} tok${k.errors ? ' · ' + fmtInt(k.errors) + ' err' : ''}`)),
+      h('td', { class: 'small' }, k.lastUsedAt ? fmtAgo(k.lastUsedAt) : h('span', { class: 'muted' }, 'never')),
+      h('td', { class: 'right' }, h('div', { class: 'chain', style: 'justify-content:flex-end' },
+        h('button', { class: 'btn sm', type: 'button', 'data-fk': 'kedit-' + k.id, onclick: () => openClientKeyModal(k) }, 'Edit'),
+        h('button', { class: 'btn sm danger', type: 'button', 'data-fk': 'kdel-' + k.id, onclick: () => revokeKey(k) }, 'Revoke')))))))));
+}
+async function patchKey(k, body) {
+  const r = await adminFetch('PATCH', `/v1/admin/keys/${encodeURIComponent(k.id)}`, body);
+  if (!r.ok) banner(r.message, 'crit');
+  else banner(`${k.name} ${body.enabled === false ? 'disabled' : body.enabled === true ? 'enabled' : 'updated'}`, 'good');
+  loadKeys();
+  return r;
+}
+async function revokeKey(k) {
+  if (!window.confirm(`Revoke "${k.name}" (${k.keyHint})? Apps using it get 401 immediately. This cannot be undone.`)) return;
+  const r = await adminFetch('DELETE', `/v1/admin/keys/${encodeURIComponent(k.id)}`);
+  if (r.ok) banner(`Revoked ${k.name}`, 'good'); else banner(r.message, 'crit');
+  loadKeys();
+}
+function knownProviderNames() {
+  const names = new Set(state.model ? Object.keys(state.model.providers) : []);
+  const D = state.admin.data;
+  if (D) { for (const b of D.builtin || []) names.add(b.name); for (const c of D.custom || []) names.add(c.name); }
+  names.delete('cache'); names.delete('none');
+  return [...names].sort();
+}
+function openClientKeyModal(k) {
+  const editing = !!k;
+  const inp = (name, attrs) => h('input', { name, autocomplete: 'off', ...attrs });
+  const pad = n => String(n).padStart(2, '0');
+  const localDate = iso => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const f = {
+    name: inp('name', { type: 'text', maxlength: 64, placeholder: 'e.g. my-app', value: k ? k.name : '' }),
+    rpm: inp('rpm', { type: 'number', min: 1, step: 1, placeholder: 'none', value: k && k.rpmLimit ? k.rpmLimit : '' }),
+    tpm: inp('tpm', { type: 'number', min: 1, step: 1, placeholder: 'none', value: k && k.tpmLimit ? k.tpmLimit : '' }),
+    budget: inp('budget', { type: 'number', min: 0, step: 'any', placeholder: 'none', value: k && isNum(k.budgetUsd) ? k.budgetUsd : '' }),
+    expires: inp('expires', { type: 'date', value: k && k.expiresAt ? localDate(k.expiresAt) : '' })
+  };
+  const allowed = new Set(k && k.allowedProviders ? k.allowedProviders : []);
+  const names = [...new Set([...knownProviderNames(), ...allowed])].sort();
+  const boxes = names.map(n => h('input', { type: 'checkbox', value: n, checked: allowed.has(n) ? true : null }));
+  const reset = editing ? h('input', { type: 'checkbox', name: 'resetSpend' }) : null;
+  openModal(editing ? `Edit key · ${k.name}` : 'Create API key', editing ? k.keyHint : 'The key is shown once after creation',
+    [field('Name', f.name),
+      h('div', { class: 'row2' }, field('Requests / min', f.rpm, 'Empty = no limit'), field('Tokens / min', f.tpm, 'Empty = no limit')),
+      h('div', { class: 'row2' }, field('Budget (USD)', f.budget, editing ? `Spent ${fmtUsd(num(k.spendUsd))}` : 'Lifetime, list-price estimate'), field('Expires', f.expires, 'Empty = never')),
+      names.length ? h('div', { class: 'field' }, h('span', null, 'Allowed providers'),
+        h('div', { class: 'checks' }, names.map((n, i) => h('label', null, boxes[i], n))), h('small', null, 'None checked = all providers')) : null,
+      reset ? h('label', { class: 'check small' }, reset, ' Reset spend to $0') : null],
+    async () => {
+      const name = f.name.value.trim();
+      if (!name) { f.name.focus(); return 'Enter a name.'; }
+      const body = { name };
+      const lim = (el, label, int) => {
+        if (el.value === '') return null;
+        const v = Number(el.value);
+        if (!(v > 0) || (int && !Number.isInteger(v))) { el.focus(); throw new Error(`${label} must be a positive ${int ? 'whole ' : ''}number.`); }
+        return v;
+      };
+      try {
+        body.rpmLimit = lim(f.rpm, 'Requests / min', true);
+        body.tpmLimit = lim(f.tpm, 'Tokens / min', true);
+        body.budgetUsd = lim(f.budget, 'Budget', false);
+      } catch (err) { return err.message; }
+      if (f.expires.value) {
+        const t = new Date(f.expires.value + 'T23:59:59');
+        if (Number.isNaN(t.getTime())) return 'Invalid expiry date.';
+        body.expiresAt = t.toISOString();
+      } else body.expiresAt = null;
+      const picked = boxes.filter(x => x.checked).map(x => x.value);
+      body.allowedProviders = picked.length ? picked : null;
+      if (reset && reset.checked) body.resetSpend = true;
+      const r = editing ? await adminFetch('PATCH', `/v1/admin/keys/${encodeURIComponent(k.id)}`, body)
+        : await adminFetch('POST', '/v1/admin/keys', body);
+      if (!r.ok) return r.message;
+      closeModal();
+      loadKeys();
+      if (editing) banner(`Saved ${name}`, 'good');
+      else openRevealModal(r.data.key, r.data.record);
+      return null;
+    }, editing ? 'Save changes' : 'Create key');
+}
+async function copyText(text, input) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { try { input.select(); return document.execCommand('copy'); } catch { return false; } }
+}
+/** One-time display of a newly created key; the value only lives in this modal. */
+function openRevealModal(key, rec) {
+  const out = h('input', { type: 'text', readonly: true, value: key, 'aria-label': 'New API key', spellcheck: 'false' });
+  const copyBtn = h('button', { class: 'btn', type: 'button', onclick: async () => {
+    const ok = await copyText(key, out);
+    copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+  } }, 'Copy');
+  const usePg = h('button', { class: 'btn ghost sm', type: 'button', onclick: () => {
+    sess(PG_KEY, key); $('pg-key').value = key; usePg.textContent = 'Set in playground'; usePg.disabled = true;
+  } }, 'Use in playground');
+  openModal(`Key created${rec && rec.name ? ' · ' + rec.name : ''}`, null,
+    [h('div', { class: 'warnbox' }, h('b', null, 'Copy this key now.'), ' It is shown only once; CortexGate stores only a hash and cannot show it again.'),
+      h('div', { class: 'keybox' }, out, copyBtn),
+      h('div', { class: 'muted small' }, 'Send it as ', h('span', { class: 'mono' }, 'Authorization: Bearer cg-…'), ' (OpenAI SDK api_key) or ', h('span', { class: 'mono' }, 'x-api-key'), '.'),
+      h('div', null, usePg)],
+    async () => { closeModal(); return null; }, 'Done');
+  out.focus(); out.select();
+}
+$('btn-add-key').addEventListener('click', () => openClientKeyModal(null));
 
 /* ---------- Modal ---------- */
 let modalReturn = null;
@@ -2123,7 +2301,7 @@ function ingest(data) {
 let ws = null, pollTimer = null, wsRetryTimer = null, pollFails = 0;
 async function pollOnce() {
   try {
-    const res = await fetch('/v1/chat/live', { cache: 'no-store' });
+    const res = await fetch('/v1/chat/live', { cache: 'no-store', headers: monHeaders() });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     pollFails = 0;
@@ -2140,7 +2318,8 @@ function connectWs() {
   clearTimeout(wsRetryTimer);
   if (!('WebSocket' in window)) { startPolling(); return; }
   let opened = false;
-  try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/metrics'); }
+  const tok = sess(TOKEN_KEY);
+  try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/metrics' + (tok ? '?token=' + encodeURIComponent(tok) : '')); }
   catch { startPolling(); wsRetryTimer = setTimeout(connectWs, 15000); return; }
   ws.onopen = () => { opened = true; };
   ws.onmessage = ev => {
@@ -2149,7 +2328,14 @@ function connectWs() {
     state.conn = 'ws'; stopPolling(); ingest(msg);
   };
   ws.onerror = () => {};
-  ws.onclose = () => { ws = null; if (state.conn === 'ws') state.conn = 'poll'; startPolling(); wsRetryTimer = setTimeout(connectWs, opened ? 5000 : 15000); };
+  const self = ws;
+  ws.onclose = () => { if (ws !== self) return; ws = null; if (state.conn === 'ws') state.conn = 'poll'; startPolling(); wsRetryTimer = setTimeout(connectWs, opened ? 5000 : 15000); };
+}
+/** Re-open live metrics after the admin token changes. */
+function reconnectLive() {
+  const old = ws; ws = null;
+  if (old) { try { old.close(); } catch { /* closed */ } }
+  pollOnce(); connectWs();
 }
 
 /* =========================================================
@@ -2170,7 +2356,7 @@ $('btn-reset').addEventListener('click', async () => {
   if (!window.confirm('Reset cache, stats, breakers and MongoDB history?')) return;
   const btn = $('btn-reset'); btn.disabled = true;
   try {
-    const res = await fetch('/v1/chat/reset', { method: 'POST' });
+    const res = await fetch('/v1/chat/reset', { method: 'POST', headers: monHeaders() });
     let data = {}; try { data = await res.json(); } catch { /* non-JSON */ }
     if (!res.ok || data.ok === false) throw new Error(errMsg(data, res.status));
     state.expanded.clear(); state.history = [];
@@ -2243,6 +2429,8 @@ async function sendPrompt() {
   if (prov) { headers['x-provider'] = prov; body.provider = prov; }
   const dg = $('pg-downgrade').value;
   if (dg) headers['x-allow-downgrade'] = dg;
+  const ck = $('pg-key').value.trim();
+  if (ck) headers.Authorization = 'Bearer ' + ck;
   const t0 = performance.now();
   try {
     const res = await fetch('/v1/chat/completions', { method: 'POST', headers, body: JSON.stringify(body) });
@@ -2263,6 +2451,8 @@ function pgIntro() {
       h('button', { class: 'btn sm', type: 'button', title: text, onclick: () => { $('pg-prompt').value = text; $('pg-prompt').focus(); } }, label)))));
 }
 pgIntro();
+$('pg-key').value = sess(PG_KEY) || '';
+$('pg-key').addEventListener('change', () => { const v = $('pg-key').value.trim(); sess(PG_KEY, v || null); });
 $('pg-send').addEventListener('click', sendPrompt);
 $('pg-prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendPrompt(); } });
 

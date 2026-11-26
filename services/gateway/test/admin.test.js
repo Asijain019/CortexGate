@@ -72,6 +72,8 @@ test('auth: loopback allowed, remote rejected, rebinding Host rejected, token en
   assert.equal(runAuth({ ip: '10.0.0.5' }).status, 403);
   assert.equal(runAuth({ ip: '192.168.1.2', headers: { 'x-forwarded-for': '127.0.0.1' } }).status, 403);
   assert.equal(runAuth({ host: 'evil.example:3003' }).status, 403);
+  assert.equal(runAuth({ headers: { 'x-forwarded-for': '203.0.113.9' } }).status, 403, 'loopback via a reverse proxy is not local');
+  assert.equal(runAuth({ ip: '172.17.0.1' }).status, 403, 'docker bridge is not local');
   assert.equal(runAuth({ method: 'POST', headers: { origin: 'https://evil.example' } }).status, 403);
   assert.equal(runAuth({ method: 'POST', headers: { origin: 'http://localhost:3003' } }).nextCalled, true);
   assert.equal(runAuth({ method: 'POST', json: false }).status, 415);
@@ -218,6 +220,28 @@ test('custom providers reload from the encrypted store', () => {
   assert.equal(custom.loadCustomProviders(), 1);
   assert.ok(providers.reloaded);
   custom.deleteCustom(view.id);
+});
+
+test('client keys admin API: create reveals the key once, list/patch/delete never expose key or hash', async () => {
+  const c = await call('POST', '/keys', { name: 'admin-test', rpmLimit: 5, allowedProviders: ['groq'] });
+  assert.equal(c.status, 201, c.text);
+  assert.match(c.json.key, /^cg-[A-Za-z0-9_-]{40}$/);
+  const { key, record } = c.json;
+  assert.equal(record.hash, undefined);
+  const list = await call('GET', '/keys');
+  assert.equal(list.status, 200);
+  assert.ok(!list.text.includes(key) && !list.text.includes('"hash"'));
+  assert.ok(['auto', 'required', 'off'].includes(list.json.authMode));
+  const p = await call('PATCH', `/keys/${record.id}`, { enabled: false });
+  assert.equal(p.json.record.enabled, false);
+  assert.ok(!p.text.includes(key));
+  assert.equal((await call('POST', '/keys', { name: 'bad', allowedProviders: ['nope'] })).status, 400);
+  assert.equal((await call('POST', '/keys', { name: 'x' }, { 'content-type': 'text/plain' })).status, 415);
+  const d = await call('DELETE', `/keys/${record.id}`, {});
+  assert.equal(d.status, 200);
+  assert.equal(d.json.ok, true);
+  assert.equal((await call('DELETE', `/keys/${record.id}`, {})).status, 404);
+  assert.ok(!fs.readFileSync(path.join(DIR, 'client-keys.json'), 'utf8').includes(key));
 });
 
 test('/test redacts a key echoed by the upstream error', async () => {

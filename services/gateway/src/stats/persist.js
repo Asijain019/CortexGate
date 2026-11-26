@@ -41,6 +41,17 @@ export function save(name, getter, delayMs = 700) {
   }, delayMs));
 }
 
+/** Immediate write (cancels a pending debounced save of the same name). */
+export function saveNow(name, getter) {
+  clearTimeout(timers.get(name));
+  timers.delete(name);
+  getters.delete(name);
+  writeNow(name, getter);
+}
+
+/** Directory the JSON files live in (DATA_DIR at import time, else services/gateway/data). */
+export const dataDir = () => DIR;
+
 export function flushAll() {
   for (const [name, getter] of getters) {
     clearTimeout(timers.get(name));

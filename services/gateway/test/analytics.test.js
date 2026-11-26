@@ -165,3 +165,32 @@ test('ranges and bucket sizes', () => {
 
 function round4(v) { return Number(v.toFixed(4)); }
 function round2(v) { return Number(v.toFixed(2)); }
+
+test('keys: per client key aggregation (requests, tokens, cost incl. verify/embed, errors)', () => {
+  const keyRows = [
+    { time: at(1), status: 'ok', provider: 'groq', cost: 0.01, verifyCost: 0.001, tokens: 100, latencyMs: 10, apiKeyId: 'ck_a', apiKeyName: 'old-name' },
+    { time: at(2), status: 'error', provider: 'none', cost: 0, tokens: 0, latencyMs: 10, apiKeyId: 'ck_a', apiKeyName: 'old-name' },
+    { time: at(0.5), status: 'ok', provider: 'groq', cost: 0.02, tokens: 50, latencyMs: 10, apiKeyId: 'ck_a', apiKeyName: 'svc-a' },
+    { time: at(3), status: 'ok', provider: 'cache', cache: true, cost: 0, embedCost: 0.0005, tokens: 0, latencyMs: 5, apiKeyId: 'ck_b', apiKeyName: 'svc-b' },
+    { time: at(4), status: 'ok', provider: 'groq', cost: 0.005, tokens: 20, latencyMs: 10 },
+    { time: at(120), status: 'ok', provider: 'groq', cost: 9, tokens: 9, latencyMs: 10, apiKeyId: 'ck_old', apiKeyName: 'out-of-range' }
+  ];
+  const A = computeAnalytics(keyRows, { range: '1h', now: NOW });
+  assert.ok(Array.isArray(A.keys));
+  const a = A.keys.find(k => k.id === 'ck_a');
+  assert.equal(a.name, 'svc-a', 'latest name wins');
+  assert.equal(a.requests, 3);
+  assert.equal(a.tokens, 150);
+  assert.equal(a.errors, 1);
+  assert.ok(Math.abs(a.cost - 0.031) < 1e-12);
+  const b = A.keys.find(k => k.id === 'ck_b');
+  assert.equal(b.requests, 1);
+  assert.equal(b.tokens, 0);
+  assert.ok(Math.abs(b.cost - 0.0005) < 1e-12);
+  const anon = A.keys.find(k => k.id === null);
+  assert.equal(anon.name, '(no key)');
+  assert.equal(anon.requests, 1);
+  assert.equal(A.keys.find(k => k.id === 'ck_old'), undefined, 'out-of-range rows excluded');
+  assert.equal(A.keys[0].id, 'ck_a', 'sorted by requests');
+  assert.deepEqual(computeAnalytics([], { range: '1h', now: NOW }).keys, []);
+});

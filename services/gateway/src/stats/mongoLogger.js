@@ -88,6 +88,8 @@ export async function logRequestToMongo(entry) {
       embedCost: entry.embedCost || 0,
       status: entry.status || 'ok',
       cacheBypassed: entry.cacheBypassed === true,
+      apiKeyId: entry.apiKeyId || null,
+      apiKeyName: entry.apiKeyName || null,
       created_at: entry.time ? new Date(entry.time) : new Date()
     };
 
@@ -140,7 +142,9 @@ export function fromDoc(doc) {
     route: doc.route || null,
     attempts: doc.attempts || [],
     status: doc.status || 'ok',
-    cacheBypassed: doc.cacheBypassed === true
+    cacheBypassed: doc.cacheBypassed === true,
+    apiKeyId: doc.apiKeyId || null,
+    apiKeyName: doc.apiKeyName || null
   };
 }
 

@@ -1,4 +1,4 @@
-// Admin API: provider keys + custom OpenAI-compatible providers.
+// Admin API: provider keys, custom OpenAI-compatible providers and client API keys.
 //
 // Auth: if ADMIN_TOKEN is set, header x-admin-token must match it (constant-time compare).
 // Otherwise only loopback clients are accepted, and the Host header must be a loopback name
@@ -11,33 +11,22 @@ import { providers, isConfigured } from '../providers/index.js';
 import * as keyStore from '../providers/keyStore.js';
 import * as custom from '../providers/customProvider.js';
 import { safeEqual, redact, maskKey } from '../security/secrets.js';
+import * as clientKeys from '../auth/clientKeys.js';
+import { isLocalRequest, authMode } from '../middleware/clientAuth.js';
 
 const router = Router();
 
-const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const TEST_TIMEOUT_MS = 15000;
 
 const fail = (res, status, message, extra = {}) => res.status(status).json({ ok: false, error: { message, ...extra } });
-
-function hostnameOf(hostHeader) {
-  const h = String(hostHeader || '').trim().toLowerCase();
-  if (h.startsWith('[')) return h.slice(0, h.indexOf(']') + 1);
-  return h.split(':')[0];
-}
 
 export function adminAuth(req, res, next) {
   const token = process.env.ADMIN_TOKEN;
   if (token) {
     if (!safeEqual(req.get('x-admin-token') || '', token)) return fail(res, 401, 'Admin token required (x-admin-token header)');
-  } else {
-    const ip = req.socket?.remoteAddress || '';
-    if (!LOOPBACK_IPS.has(ip)) {
-      return fail(res, 403, 'Admin API is only available from localhost unless ADMIN_TOKEN is set');
-    }
-    if (!LOOPBACK_HOSTS.has(hostnameOf(req.get('host')))) {
-      return fail(res, 403, 'Admin API requires a localhost Host header unless ADMIN_TOKEN is set');
-    }
+  } else if (!isLocalRequest(req)) {
+    // Loopback socket + loopback Host (blocks DNS rebinding) + no proxy forwarding headers.
+    return fail(res, 403, 'Admin API is only available from localhost unless ADMIN_TOKEN is set');
   }
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -266,6 +255,45 @@ router.post('/providers/:name/test', async (req, res) => {
   else builtinTests.set(name, lastTest);
   if (result.ok) resetBreaker(name);
   res.json(result);
+});
+
+// ---------------------------------------------------------------- client API keys
+// Plain keys are returned exactly once (POST 201 { key, record }); records never include the hash.
+
+function keyError(res, err) {
+  if (err instanceof clientKeys.ValidationError) return fail(res, 400, err.message);
+  return handleError(res, err);
+}
+
+router.get('/keys', (req, res) => {
+  res.json({ keys: clientKeys.listKeys(), authMode: authMode() });
+});
+
+router.post('/keys', (req, res) => {
+  try {
+    const { key, record } = clientKeys.createKey(req.body);
+    console.log(`[Admin] Created client key ${record.id} (${record.keyHint}) "${record.name}"`);
+    res.status(201).json({ key, record });
+  } catch (err) {
+    keyError(res, err);
+  }
+});
+
+router.patch('/keys/:id', (req, res) => {
+  try {
+    const record = clientKeys.updateKey(String(req.params.id), req.body);
+    if (!record) return fail(res, 404, `Client key '${req.params.id}' not found`);
+    res.json({ ok: true, record });
+  } catch (err) {
+    keyError(res, err);
+  }
+});
+
+router.delete('/keys/:id', (req, res) => {
+  const record = clientKeys.deleteKey(String(req.params.id));
+  if (!record) return fail(res, 404, `Client key '${req.params.id}' not found`);
+  console.log(`[Admin] Revoked client key ${record.id} (${record.keyHint})`);
+  res.json({ ok: true, id: record.id });
 });
 
 /** Mount after the router on the same path: turns body-parser errors into JSON 400s. */

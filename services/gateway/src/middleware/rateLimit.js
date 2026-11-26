@@ -1,7 +1,9 @@
 import { createClient } from 'redis';
 import * as requestLog from '../stats/requestLog.js';
+import { setRedisGetter } from '../auth/clientKeys.js';
 
-// Simple token bucket per API key (or per IP if no key), stored in Redis.
+// Simple token bucket per client API key id (or per IP if keyless), stored in Redis.
+// Runs after clientAuth, so req.clientKey is set; the raw key is never used as a Redis key.
 //   RATE_LIMIT_ENABLED     (default true)
 //   RATE_LIMIT_MAX_TOKENS  (default 1000) requests per window
 //   RATE_LIMIT_WINDOW_SEC  (default 60)
@@ -32,6 +34,8 @@ redis.on('error', (err) => {
   }
 });
 if (enabled()) redis.connect().catch(() => {});
+// Per-client-key RPM/TPM windows share this connection when it is ready.
+setRedisGetter(() => (redis.isReady ? redis : null));
 
 // The queue opens its own Redis connection, so load it only when first needed.
 let queuePromise;
@@ -58,8 +62,7 @@ export async function rateLimit(req, res, next) {
   if (!enabled() || !redis.isReady) return next();
 
   try {
-    const apiKey = req.headers['x-api-key'] || req.ip;
-    const tokenKey = `rate:${apiKey}`;
+    const tokenKey = req.clientKey?.id ? `rate:key:${req.clientKey.id}` : `rate:ip:${req.ip}`;
 
     let tokens = await redis.get(tokenKey);
     if (tokens === null) {
@@ -77,11 +80,15 @@ export async function rateLimit(req, res, next) {
       method: req.method,
       path: req.originalUrl,
       headers: { 'x-cache': req.headers['x-cache'], 'x-provider': req.headers['x-provider'], 'x-routing-policy': req.headers['x-routing-policy'] },
-      body: req.body
+      body: req.body,
+      apiKeyId: req.clientKey?.id || null
     });
     const messages = req.body?.messages;
     const last = Array.isArray(messages) ? messages[messages.length - 1]?.content : '';
-    await requestLog.recordQueued({ prompt: String(last ?? '').slice(0, 70) });
+    await requestLog.recordQueued({
+      prompt: String(last ?? '').slice(0, 70),
+      apiKeyId: req.clientKey?.id || null, apiKeyName: req.clientKey?.name || null
+    });
     res.status(202).json({ message: 'Request queued due to rate limit', jobId: job?.id ?? null });
   } catch (err) {
     console.error('Rate limit middleware error', err);

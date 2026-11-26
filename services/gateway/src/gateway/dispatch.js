@@ -130,15 +130,17 @@ function describeExcluded(excluded, names) {
  * @param {object} p
  *   messages, model?, provider? (alias providerParam), policy?, tier? ('light'|'standard'|'heavy'),
  *   purpose? ('verify' calls are not counted, never wait and never downgrade), signal? (caller abort),
- *   allowDowngrade? (true|false|'true'|'false'; default by policy)
+ *   allowDowngrade? (true|false|'true'|'false'; default by policy),
+ *   exclude? (provider names never routed to, e.g. a client key's allowedProviders complement)
  * @returns {Promise<{result, provider, model, cost, attempts, failedProviders, skipped,
  *   skippedProviders, providerErrors, routing, error, lastError}>}
  */
-export async function dispatch({ messages, model, provider, providerParam, policy, tier, purpose, signal, allowDowngrade } = {}) {
+export async function dispatch({ messages, model, provider, providerParam, policy, tier, purpose, signal, allowDowngrade, exclude } = {}) {
   const startedAt = Date.now();
   const deadline = startedAt + requestBudgetMs();
   const isVerify = purpose === 'verify';
-  const routeArgs = { messages, policy, model, provider: provider || providerParam, purpose, allowDowngrade };
+  const baseExclude = Array.isArray(exclude) ? exclude : [];
+  const routeArgs = { messages, policy, model, provider: provider || providerParam, purpose, allowDowngrade, exclude: baseExclude };
   let plan = route({ ...routeArgs, tier });
   const firstPlan = plan;
   if (!isVerify) stats.recordRoute(plan);
@@ -242,7 +244,7 @@ export async function dispatch({ messages, model, provider, providerParam, polic
         downgrade = { from: plan.tier, to: lower, reason: why };
         if (!isVerify) stats.recordDowngrade();
         console.warn(`[Gateway] downgrading ${plan.tier} -> ${lower}: ${why}`);
-        plan = route({ ...routeArgs, tier: lower, exclude: tried });
+        plan = route({ ...routeArgs, tier: lower, exclude: [...baseExclude, ...tried] });
         excluded = { ...excluded, ...plan.excluded };
         skippedProviders.push(...plan.skipped.map(s => s.provider));
         capacityFailure = null;

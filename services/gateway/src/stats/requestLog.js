@@ -42,6 +42,8 @@ function buildRow(entry) {
     attempts: [],
     verification: null,
     nearSimilarity: null,
+    apiKeyId: null,
+    apiKeyName: null,
     ...entry
   };
 }

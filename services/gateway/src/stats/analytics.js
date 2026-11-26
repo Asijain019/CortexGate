@@ -105,6 +105,7 @@ export function computeAnalytics(rows, { range = '1h', now = Date.now(), source 
   const failingBy = new Map();
   const transitions = new Map();
   const cache = { lookups: 0, hits: 0, verifiedHits: 0, rejected: 0, bypassed: 0, savedCost: 0, verifyCost: 0, embedCost: 0 };
+  const keyAgg = new Map();
   const F = { requestsWithFailover: 0, chainSum: 0, maxChainLength: 0, recovered: 0, unrecovered: 0, dispatched: 0 };
 
   const provEntry = name => {
@@ -149,6 +150,14 @@ export function computeAnalytics(rows, { range = '1h', now = Date.now(), source 
       if (!queued && Number.isFinite(latency)) b._lat.push(latency);
       add(b.byProvider, r.provider || 'none');
     }
+
+    // client API keys (rows without a key are grouped as id null, e.g. keyless localhost calls)
+    const kid = r.apiKeyId || null;
+    const k = keyAgg.get(kid) || { id: kid, name: kid ? null : '(no key)', requests: 0, tokens: 0, cost: 0, errors: 0 };
+    k.requests++; k.tokens += tokens; k.cost += cost + verifyCost + embedCost;
+    if (r.status === 'error') k.errors++;
+    if (kid && r.apiKeyName) k.name = r.apiKeyName;
+    keyAgg.set(kid, k);
 
     // cache
     if (!queued) {
@@ -305,7 +314,10 @@ export function computeAnalytics(rows, { range = '1h', now = Date.now(), source 
       savedCost: cache.savedCost,
       netSaved: cache.savedCost - cache.verifyCost - cache.embedCost
     },
-    errors: [...errs.values()].sort((a, b) => b.count - a.count)
+    errors: [...errs.values()].sort((a, b) => b.count - a.count),
+    keys: [...keyAgg.values()]
+      .map(k => ({ ...k, name: k.name || k.id }))
+      .sort((a, b) => b.requests - a.requests || String(a.name).localeCompare(String(b.name)))
   };
 }
 

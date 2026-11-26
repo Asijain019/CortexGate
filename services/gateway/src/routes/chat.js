@@ -7,6 +7,9 @@ import { dispatch } from '../gateway/dispatch.js';
 import { classify, normalizePolicy, resetRoundRobin } from '../gateway/router.js';
 import { buildLivePayload, buildProvidersPayload } from '../gateway/liveStatus.js';
 import { clearMongoRequests, getMongoSummary } from '../stats/mongoLogger.js';
+import * as clientKeys from '../auth/clientKeys.js';
+import { canonicalName } from '../providers/index.js';
+import { sendError } from '../middleware/clientAuth.js';
 
 const router = Router();
 
@@ -24,8 +27,34 @@ router.post('/completions', async (req, res) => {
 
   const startedAt = Date.now();
   const promptPreview = String(messages[messages.length - 1]?.content ?? '').slice(0, 70);
-  const policy = normalizePolicy(body.routing_policy || req.headers['x-routing-policy']);
+  const requestedPolicy = body.routing_policy || req.headers['x-routing-policy'];
+  let policy = normalizePolicy(requestedPolicy);
   const providerParam = body.provider || req.headers['x-provider'];
+
+  // Client key restrictions (req.clientKey is set by middleware/clientAuth.js; null for keyless local calls).
+  const ck = req.clientKey || null;
+  let exclude;
+  if (ck) {
+    const forced = providerParam ? canonicalName(String(providerParam)) : null;
+    const slash = typeof model === 'string' ? model.indexOf('/') : -1;
+    const modelProvider = slash > 0 ? canonicalName(model.slice(0, slash)) : null;
+    for (const p of [forced, modelProvider]) {
+      if (p && !clientKeys.providerAllowed(ck, p)) {
+        return sendError(res, 403, 'PROVIDER_NOT_ALLOWED', `This API key may not use provider '${p}' (allowed: ${ck.allowedProviders.join(', ')})`);
+      }
+    }
+    if (!clientKeys.policyAllowed(ck, policy)) {
+      if (requestedPolicy) {
+        return sendError(res, 403, 'POLICY_NOT_ALLOWED', `This API key may not use routing policy '${policy}' (allowed: ${ck.allowedPolicies.join(', ')})`);
+      }
+      policy = ck.allowedPolicies[0];
+    }
+    exclude = clientKeys.excludedProviders(ck);
+  }
+  const keyFields = ck ? { apiKeyId: ck.id, apiKeyName: ck.name } : { apiKeyId: null, apiKeyName: null };
+  const chargeKey = (row, error) => {
+    if (ck) clientKeys.recordUsage(ck.id, { cost: (row.cost || 0) + (row.verifyCost || 0) + (row.embedCost || 0), tokens: row.tokens || 0, error });
+  };
 
   // --- Semantic cache lookup (skipped if x-cache: bypass) ---
   const useCache = req.headers['x-cache'] !== 'bypass';
@@ -40,13 +69,15 @@ router.post('/completions', async (req, res) => {
         reason: `semantic cache hit (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''})`, override: null
       };
       console.log(`[Gateway] CACHE HIT (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''}) - saved $${entry.cost.toFixed(6)}`);
-      await requestLog.record({
+      const hitRow = await requestLog.record({
+        ...keyFields,
         provider: 'cache', model: entry.response?.model || null, cache: true, similarity, verified,
         cost: 0, verifyCost: cacheCtx.verifyCost || 0, embedCost: cacheCtx.embedCost || 0, savedCost: entry.cost,
         tokens: 0, savedTokens: entry.response.usage?.total_tokens || 0,
         latencyMs: Date.now() - startedAt, prompt: promptPreview,
         failedProviders: [], skippedProviders: [], status: 'ok', route, attempts: []
       });
+      chargeKey(hitRow, false);
       return res.json({
         id: completionId(),
         object: 'chat.completion',
@@ -70,7 +101,7 @@ router.post('/completions', async (req, res) => {
 
   // Tier downgrade under load: body allow_downgrade or header x-allow-downgrade (default by policy).
   const allowDowngrade = body.allow_downgrade ?? req.headers['x-allow-downgrade'];
-  const out = await dispatch({ messages, model, provider: providerParam, policy, allowDowngrade });
+  const out = await dispatch({ messages, model, provider: providerParam, policy, allowDowngrade, exclude });
   const r = out.routing;
   const routing = {
     tier: r.tier, task: r.task, reason: r.reason, policy: r.policy, estTokens: r.estTokens,
@@ -86,17 +117,18 @@ router.post('/completions', async (req, res) => {
     failedProviders: out.failedProviders, skippedProviders: out.skippedProviders,
     verification, nearSimilarity: cacheCtx.rejected?.similarity ?? null,
     verifyCost: cacheCtx.verifyCost || 0, embedCost: cacheCtx.embedCost || 0,
-    route, attempts: out.attempts
+    route, attempts: out.attempts, ...keyFields
   };
 
   if (out.result) {
     if (useCache) {
       semanticCache.store({ vector: cacheCtx.vector, key: cacheCtx.key, response: out.result, cost: out.cost, provider: out.provider });
     }
-    await requestLog.record({
+    const okRow = await requestLog.record({
       provider: out.provider, model: out.model, cache: false, cost: out.cost,
       tokens: out.result.usage?.total_tokens || 0, status: 'ok', cacheBypassed: !useCache, ...common
     });
+    chargeKey(okRow, false);
     return res.json({
       id: completionId(),
       object: 'chat.completion',
@@ -113,7 +145,8 @@ router.post('/completions', async (req, res) => {
   }
 
   const status = out.error?.status || 502;
-  await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', cacheBypassed: !useCache, ...common });
+  const errRow = await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', cacheBypassed: !useCache, ...common });
+  chargeKey(errRow, true);
   if (out.error?.retryAfterSec) res.set('Retry-After', String(out.error.retryAfterSec));
   return res.status(status).json({
     error: {

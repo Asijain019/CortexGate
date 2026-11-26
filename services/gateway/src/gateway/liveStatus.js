@@ -10,6 +10,7 @@ import { catalogModels, catalogContext, catalog, normalizePolicy, providerTimeou
 import * as capacity from './capacity.js';
 import { requestBudgetMs, maxFailoverAttempts } from './dispatch.js';
 import { getHealth, healthCheckIntervalMs } from './healthCheck.js';
+import { authMode } from '../middleware/clientAuth.js';
 
 /** Built-in chain plus dashboard-registered custom providers. */
 function allProviderNames() {
@@ -99,7 +100,8 @@ function buildConfig(cache) {
     cacheThreshold: cache.threshold ?? parseFloat(process.env.CACHE_THRESHOLD || '0.88'),
     cacheTrustAbove: cache.trustAbove ?? parseFloat(process.env.CACHE_TRUST_ABOVE || '0.985'),
     cacheVerify: cache.verifyEnabled ?? (process.env.CACHE_VERIFY || 'true').toLowerCase() !== 'false',
-    rateLimit: rateLimitStatus()
+    rateLimit: rateLimitStatus(),
+    authMode: authMode()
   };
 }
 

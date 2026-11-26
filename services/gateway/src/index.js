@@ -9,28 +9,37 @@ import { rateLimit } from './middleware/rateLimit.js';
 import * as circuit from './gateway/circuitBreaker.js';
 import { watchEnv } from './gateway/envWatcher.js';
 import { buildModelList } from './gateway/liveStatus.js';
+import { importBootstrap } from './auth/clientKeys.js';
+import { authMode, clientAuth, monitorAuth, chatGate, logStartup } from './middleware/clientAuth.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const startedAt = Date.now();
+
+// Client API keys: import CORTEXGATE_BOOTSTRAP_KEY (hashed) once, then report the auth mode.
+importBootstrap();
+logStartup();
 
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptimeSec: Math.round((Date.now() - startedAt) / 1000), authMode: authMode() });
 });
 
 // OpenAI-style model list: { object: 'list', data: [{ id: 'groq/openai/gpt-oss-20b', owned_by, tier }] }
-// ?all=1 includes unconfigured providers.
-app.get('/v1/models', (req, res) => {
+// ?all=1 includes unconfigured providers. Needs a client key (or the admin token) unless CLIENT_AUTH allows.
+app.get('/v1/models', clientAuth({ allowAdminToken: true }), (req, res) => {
   res.json(buildModelList({ all: ['1', 'true'].includes(String(req.query.all || '').toLowerCase()) }));
 });
 
-// Admin (keys, custom providers) and analytics: not rate-limited; admin has its own auth.
+// Admin (keys, custom providers, client keys) and analytics: not rate-limited; admin has its own auth,
+// analytics follows the monitoring rule (local or x-admin-token unless CLIENT_AUTH=off).
 app.use('/v1/admin', adminRouter, adminJsonErrors);
-app.use('/v1/analytics', analyticsRouter);
+app.use('/v1/analytics', monitorAuth, analyticsRouter);
 
-app.use('/v1/chat', rateLimit, chatRouter);
+// POST /completions: client key (+ per-key limits); everything else under /v1/chat is monitoring.
+app.use('/v1/chat', chatGate, rateLimit, chatRouter);
 
 // Live dashboard (polls /v1/chat/live or listens on /ws/metrics)
 app.get('/dashboard', (req, res) => {
