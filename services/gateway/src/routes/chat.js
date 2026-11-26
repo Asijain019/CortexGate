@@ -75,7 +75,8 @@ router.post('/completions', async (req, res) => {
   const routing = {
     tier: r.tier, task: r.task, reason: r.reason, policy: r.policy, estTokens: r.estTokens,
     estInputTokens: r.estInputTokens, estOutputTokens: r.estOutputTokens, requiredQuality: r.requiredQuality,
-    estCost: r.estCost, downgrade: r.downgrade, queuedMs: r.queuedMs, allowDowngrade: r.allowDowngrade
+    estCost: r.estCost, downgrade: r.downgrade, queuedMs: r.queuedMs, allowDowngrade: r.allowDowngrade,
+    eligible: r.eligible, excluded: r.excluded, candidates: r.candidates
   };
   const route = { ...r };
 
