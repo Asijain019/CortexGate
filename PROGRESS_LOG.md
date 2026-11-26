@@ -37,3 +37,19 @@ Chronological record of project changes, oldest first. For current behavior and 
 - Documented the main gateway files, current provider fallback behavior, and how to demo Groq-to-Gemini failover; added `npm test`.
 - Clarified that dashboard API costs are list-price estimates rather than actual billing data, exposed estimated savings after verifier calls, and documented that embedding usage is not yet included.
 - Added `PROJECT_SCOPE.md` to separate implemented midterm work from proposed post-midterm features; updated README planned features for provider expansion, complexity-aware routing, custom endpoints, quota controls, evaluation, and dashboard analytics.
+
+## Nov 26
+
+- Merged upstream provider integrations and queued rate limiting (`5ef058d`). Fixed the `redis`/`bullmq` dependency conflict, made the gateway start without Redis, read `REDIS_URL` everywhere, and added `DNS_SERVERS` for MongoDB Atlas SRV lookups on Windows.
+- Live-tested every provider key: Groq, NVIDIA, OpenRouter and Gemini (`3.5-flash-lite`) work; Mistral key expired (401), SambaNova needs billing (402), Hugging Face needs credits (402), GitHub Models returns plain-text "OK" for every request.
+- Diagnosed the Gemini errors: embeddings were healthy (40 concurrent calls, all 200); Gemini chat models returned `503 high demand` or timed out, and one search could trigger up to four Gemini calls. Added an embedding memo and cooldown, light-tier cache verification, and a Gemini fallback-model list.
+- Cache: time-sensitive bypass, negation and number guards, embedding cost accounting, `netSaved = costSaved − verifyCost − embedCost`, hit rate over cacheable lookups only, default threshold aligned to 0.92.
+- Cache TTL by question type (factual 7 d, code 3 d, general 24 h, creative 6 h), fixed expiry that hits never extend, background sweep, 1 000-entry LRU cap, Float32 vectors in memory and base64 on disk.
+- Smart routing: task classification, input/output token estimation, quality floors per tier, context-window checks, expected-cost estimates, and cost/balanced/quality policies with per-request overrides.
+- Capacity-aware dispatch: per-provider in-flight caps and rolling RPM/TPM budgets, load penalty, least-loaded selection with round robin for ties, 2.5 s bounded capacity queue, policy-controlled quality downgrades, `503 CAPACITY_EXHAUSTED` with `Retry-After`.
+- Bounded failover: 10 s fixed per-attempt timeout, at most 3 attempts, 25 s request budget, 429 cooldowns using `Retry-After`, auth/billing/bad-response disabling persisted across restarts, active health checks every 60 s. A heavy request that took five attempts and 28 s now completes in one attempt (~6.7 s).
+- Added providers: Ollama (local, Docker service), LM Studio (local), Cerebras, Cloudflare Workers AI, Cohere and Together, plus user-defined OpenAI-compatible providers with presets.
+- Dashboard-managed API keys encrypted with AES-256-GCM, admin API restricted to localhost or `ADMIN_TOKEN`, key hints only.
+- Analytics API (`/v1/analytics`): time series, p50/p95/p99 latency, error types, per-provider and per-model usage, tier/task/policy usage, failover chains and cache funnel. MongoDB now stores routing decisions and attempt chains.
+- Rebuilt the dashboard as a multi-page console (overview, analytics, providers, routing, logs, playground, settings) with WebSocket live updates.
+- Test suite expanded from 5 to 119 tests; updated README, PROJECT_SCOPE and `.env.example`.

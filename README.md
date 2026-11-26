@@ -1,10 +1,8 @@
 # CortexGate
 
-**An AI gateway and cost-optimization platform for LLM applications.**
+**A self-hosted, LiteLLM-style AI gateway: one OpenAI-compatible endpoint in front of many LLM providers, with smart routing, bounded failover, semantic caching and a live analytics console.**
 
-CortexGate is a self-hosted gateway that sits between an application and multiple Large Language Model (LLM) providers. The application talks to one OpenAI-compatible endpoint, and CortexGate applies a control plane to every request: semantic caching, provider failover, and cost tracking.
-
-> **Status: working prototype.** The gateway, multi-provider failover, semantic cache, request history, live dashboard, and Redis/BullMQ request queue are implemented. Gemini retries an overloaded/rate-limited chat model using a configurable fallback model. Automated gateway tests run with `npm test`; features marked *Planned* below are proposals, not implemented functionality. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the chronological project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for project scope.
+> **Status (Nov 26, 2026): feature-complete prototype.** Smart quality/cost/token/load-aware routing, capacity-aware failover, active health checks, 15 provider adapters plus user-defined OpenAI-compatible providers, encrypted dashboard-managed API keys, semantic cache with per-type TTLs, analytics API and a multi-page dashboard are implemented and covered by 119 automated tests. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the dated project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for scope.
 
 *Major Project (PR1107), Institute of Engineering and Technology (IET), JK Lakshmipat University.*
 
@@ -12,236 +10,260 @@ CortexGate is a self-hosted gateway that sits between an application and multipl
 
 Applications that call LLM APIs run into three recurring problems:
 
-1. **Rising token costs.** The same question, asked in different words, is billed in full every time because exact-match caching cannot detect rewordings.
-2. **Poor load handling.** One API key on one provider returns HTTP 429 or times out under load, and the application shows the user a hard error.
-3. **No visibility or control.** Teams cannot see what was spent, by which feature, or which provider is degraded.
+1. **Rising token costs.** The same question in different words is billed in full every time; exact-match caching cannot detect rewordings, and simple prompts are often sent to expensive models.
+2. **Poor load handling.** One key on one provider returns HTTP 429 or times out under load, and the application shows a hard error.
+3. **No visibility or control.** Teams cannot see what was spent, which provider is degraded, or why a request went where it did.
 
-CortexGate addresses these by inserting a gateway between the application and the providers, so routing, caching, failover and cost accounting are done once, in one place.
+CortexGate puts routing, caching, failover, quota control and cost accounting in one place between the application and the providers.
 
 ## Features
 
 | Feature | Status |
 |---|---|
-| OpenAI-compatible endpoint (`/v1/chat/completions`) | Implemented |
-| Provider adapters: Groq, Gemini, GitHub Models, Hugging Face, Mistral, NVIDIA, OpenRouter, SambaNova | Implemented |
-| Configurable provider order, failover on provider errors, and Gemini model fallback on 429/503 | Implemented |
-| Semantic cache (embeddings + cosine similarity, saved to disk) | Implemented |
-| Match verification (a model confirms borderline cache matches against the stored answer) | Implemented |
-| Circuit breaker (skips an unhealthy provider for a short time) | Implemented |
-| Live `.env` reload and persistent request history | Implemented |
-| Token-based list-price estimates for chat and verification calls | Implemented |
-| Live dashboard with cache metrics, request history, estimated costs, and failovers | Implemented |
-| MongoDB request logging with estimated vs counterfactual list-price cost | Implemented |
-| Prompt tester, cache bypass, provider override, request filters, reset, and theme switch | Implemented |
-| Token-bucket rate limiting and request queue (Redis, BullMQ) | Implemented |
-| WebSocket metrics endpoint | Implemented |
-| Request-complexity / quality-aware routing across lightweight and stronger models | Planned |
-| Dashboard-managed custom OpenAI-compatible endpoints and user-supplied model credentials | Planned |
-| Configurable per-provider quotas and retry policies | Planned |
-| Cache quality controls and complete cost accounting, including embedding usage | Planned |
-| Provider comparison benchmarks for latency, reliability, quality, and estimated cost | Planned |
-| Dashboard analytics: provider health/latency, quota use, cache funnel, and savings trends | Planned |
+| OpenAI-compatible `POST /v1/chat/completions` and `GET /v1/models` | Implemented |
+| Provider adapters: Groq, Gemini, NVIDIA NIM, OpenRouter, Cerebras, Cloudflare Workers AI, Cohere, Together, Mistral, SambaNova, GitHub Models, Hugging Face, Ollama (local), LM Studio (local) | Implemented |
+| User-defined OpenAI-compatible providers (Together, Fireworks, DeepInfra, vLLM, …) added from the dashboard | Implemented |
+| Encrypted (AES-256-GCM) dashboard-managed API keys, never returned to the browser | Implemented |
+| Smart routing: request classification, token estimation, quality floors, cost/balanced/quality policies | Implemented |
+| Load- and quota-aware dispatch (in-flight caps, per-provider RPM/TPM budgets, cooldowns) | Implemented |
+| Bounded capacity queue, explicit quality-downgrade rules, clear `503 CAPACITY_EXHAUSTED` | Implemented |
+| Bounded failover: fixed per-attempt timeout, max attempts, request budget, circuit breaker | Implemented |
+| Persisted provider health (bad keys / billing / broken endpoints are not retried after restart) | Implemented |
+| Active background health checks | Implemented |
+| Semantic cache: embeddings + cosine similarity, model verification of borderline matches | Implemented |
+| Cache guards: time-sensitive bypass, negation and number guards; per-type TTLs, LRU, sweep | Implemented |
+| Full cost accounting: chat, verification and embedding costs; gross and net savings | Implemented |
+| Analytics API: time series, latency percentiles, error types, failover chains, per-model costs | Implemented |
+| Multi-page dashboard: overview, analytics, providers, routing, logs, playground, settings | Implemented |
+| Gateway rate limiting (Redis token bucket) with BullMQ request queue and worker | Implemented |
+| MongoDB request logging, local JSON fallback, WebSocket live metrics | Implemented |
 | Vector database for the cache (Qdrant / pgvector) | Future option |
-| Team controls, budgets, alerts, and a React + WebSocket dashboard | Stretch scope |
+| Multi-user accounts, budgets, alerts | Stretch scope |
 
-## Dashboard
-
-The gateway serves its live dashboard at `http://localhost:3001/dashboard`. It polls `GET /v1/chat/live` for request history, cache statistics, provider counts, and health. The analytics charts use that same live response, and the prompt tester sends requests to `POST /v1/chat/completions`.
-
-## How it works
+## Architecture
 
 ```mermaid
 flowchart TD
-    A[Client application] --> B[API Gateway<br/>POST /v1/chat/completions]
-    B --> C{Semantic cache<br/>similar and confirmed?}
-    C -- hit --> H[Return cached answer<br/>cost = 0]
-    C -- miss --> D[Provider chain]
-    D --> E[Groq]
-    E -- error / 429 / timeout --> F[Gemini]
-    F -- model busy / rate limited --> F2[Gemini fallback model]
-    F2 --> G[Store answer in cache]
-    E -- success --> G[Store answer in cache]
-    F --> G
-    G --> I[Response to client]
-    H --> J[Request log]
-    I --> J
-    J --> K[Dashboard<br/>/dashboard]
+    A[Client] --> RL[Rate limiter<br/>Redis token bucket]
+    RL -- over limit --> Q[BullMQ queue + worker]
+    RL --> C{Semantic cache}
+    C -- hit --> R[Response]
+    C -- miss --> RT[Router<br/>classify, estimate tokens,<br/>quality floor, policy score]
+    RT --> F[Pre-dispatch filter<br/>breaker, cooldown, disabled,<br/>in-flight, RPM/TPM]
+    F --> S[Select least-loaded, fastest<br/>in top bucket; RR breaks ties]
+    S --> P1[Provider attempt<br/>fixed timeout]
+    P1 -- error / timeout --> P2[Next eligible provider<br/>max 3 attempts, 25s budget]
+    F -- all capable busy --> W[Bounded wait ≤ 2.5s]
+    W -- still busy --> D{Downgrade allowed?}
+    D -- yes --> S
+    D -- no --> E[503 CAPACITY_EXHAUSTED<br/>+ Retry-After]
+    P1 --> ST[Store in cache, log, stats]
+    P2 --> ST
+    ST --> R
+    HC[Health checker<br/>every 60s] -. marks providers .-> F
+    ST --> DB[(MongoDB / local log)] --> UI[Dashboard + analytics]
 ```
 
-1. The gateway embeds the prompt with the Gemini embedding API.
-2. It compares the embedding with cached prompts using cosine similarity. Matches at or above the trust level (0.985) are returned directly. Borderline matches (0.88 to 0.985) are first confirmed by a quick model check against the stored answer. A confirmed match is returned with no provider call and the avoided cost is recorded.
-3. On a miss, the request goes to the first provider in the chain. If that provider fails with a retryable error, the next provider is tried automatically.
-4. Successful answers are stored in the cache, and every request is written to the request log that feeds the dashboard.
+## How routing works
 
-## Tech stack
+Every request (unless it names a provider or model explicitly) goes through these steps. Each decision is recorded in the response (`routing`, `attempts`) and on the dashboard.
 
-- **Runtime:** Node.js (18+), Express
-- **LLM providers:** Groq and Google Gemini (hosted APIs; account pricing and quotas vary)
-- **Embeddings:** Gemini embedding API (`gemini-embedding-001`, task type `SEMANTIC_SIMILARITY`)
-- **Cache store:** in-memory vector list (Qdrant / pgvector planned)
-- **Dashboard:** plain HTML + JavaScript, polling
-- **Persistence:** local JSON history and optional MongoDB request logging
-- **Planned:** additional provider adapters, request-aware routing, quota/rate controls, and expanded analytics; see [PROJECT_SCOPE.md](PROJECT_SCOPE.md)
+1. **Estimate.** Input tokens ≈ characters ÷ 4. The classifier detects the task (factual, chat, summarize, code, creative, reasoning) and estimates output tokens (≈150 for a factual answer, ≈700 for code, ≈900 for reasoning; ×1.6 for "detailed / step by step", ×0.3 for "briefly"). A complexity score maps the request to a tier with a **minimum model quality**: light 0.40, standard 0.60, heavy 0.80. Prompt length is only one signal, so a long but simple prompt is not sent to an expensive model.
+2. **Eligible models.** A provider's model qualifies only if its quality meets the floor and its context window fits input + estimated output. Expected cost = input × prompt price + output × completion price.
+3. **Pre-dispatch filtering (load and quota, not just health).** Providers are removed if disabled (bad key, billing, broken endpoint), circuit-open, in a 429 cooldown, at their in-flight cap, or out of their rolling 60-second RPM/TPM budget (defaults follow each free tier, e.g. Groq 30 RPM / 8 000 TPM, Gemini 10 RPM). Each exclusion is logged with its reason.
+4. **Score by policy.**
+   - `cost`: cheapest eligible model.
+   - `quality`: highest-quality eligible model.
+   - `balanced` (default): `0.40·quality + 0.25·(1 − normalized cost) + 0.35·speed` (light requests weight speed more). Speed uses measured median latency × reliability.
+   - Every score is multiplied by `1 − 0.5·load`, where load is the highest of in-flight, RPM and TPM usage, so one provider is not overcrowded.
+5. **Select.** Candidates within 0.12 of the best score form the top bucket; the least-loaded, fastest one goes first, and round robin only breaks ties.
+6. **Capacity wait.** If every capable provider is busy, the request waits in a per-provider FIFO for at most 2.5 seconds (queue max 20). A provider's `Retry-After` is honored only if it fits in that wait.
+7. **Downgrade rules.** If the wait expires, the request moves down one tier only when the policy allows it (allowed for `cost` and `balanced`, never for `quality`; override with `x-allow-downgrade`). Downgrades are logged with the reason. Otherwise the gateway returns `503 CAPACITY_EXHAUSTED` with `Retry-After`. A complex request is never silently sent to a weak model.
 
-## Project structure
+### Failover
 
-```
-CortexGate/
-├── README.md
-├── PROGRESS_LOG.md
-├── PROJECT_SCOPE.md
-└── services/gateway/
-    ├── package.json
-    ├── .env.example
-    ├── test/                       # provider failover and Gemini fallback tests
-    ├── public/
-    │   └── dashboard.html          # live dashboard
-    ├── scripts/
-    │   └── tune-threshold.mjs      # similarity threshold evaluation
-    └── src/
-        ├── index.js                # Express app, /health, /dashboard
-        ├── routes/chat.js          # completions route, cache + failover logic
-        ├── providers/              # groq.js, gemini.js, index.js (provider chain)
-        ├── gateway/                # dispatch.js (failover), circuitBreaker.js, envWatcher.js
-        ├── cache/                  # embedder.js, semanticCache.js, verifier.js
-        └── stats/                  # requestLog.js, persist.js (saved to data/)
-```
+Round robin over every provider makes failover slow; always choosing the healthiest provider overcrowds it. CortexGate combines them:
 
-**Main files:** `src/index.js` starts the gateway; `src/routes/chat.js` handles chat requests and cache integration; `src/gateway/dispatch.js` applies provider ordering, retries, and failover; `src/providers/groq.js` and `src/providers/gemini.js` call provider APIs; `src/cache/semanticCache.js` and `src/cache/embedder.js` implement semantic caching; `src/stats/requestLog.js` and `src/stats/mongoLogger.js` record request history. `test/dispatch.test.js` and `test/gemini.test.js` cover failover behavior.
+- **Health-first ranking**, with round robin only among near-equal healthy providers.
+- **Bounded failover:** 10 s fixed timeout per attempt (`PROVIDER_TIMEOUT_MS`; Ollama 30 s), at most 3 attempts (`MAX_FAILOVER_ATTEMPTS`), 25 s overall (`REQUEST_BUDGET_MS`). The next attempt goes to the next eligible provider of the required quality.
+- **Error handling:** 429 → cooldown for `Retry-After` (or 30 s); 401/403/402 → provider disabled for 1 h; non-JSON response → disabled for 30 min; 3 consecutive failures → circuit open for 20 s, then a single probe.
+- **Persistence:** provider health is saved to `data/provider-health.json` and fingerprinted by API key, so a restart does not retry known-broken providers, and changing a key re-enables the provider.
+- **Active health checks** every 60 s use free `GET /models`-style endpoints; a tiny chat probe runs only for providers whose circuit is open.
+
+Measured on Nov 26, 2026: a heavy request that previously tried five providers in 28 s now completes on the first eligible provider in about 6.7 s, with broken providers excluded before dispatch.
+
+## Semantic cache
+
+1. The last user message is embedded with Gemini `gemini-embedding-001` (`SEMANTIC_SIMILARITY` task type). Identical prompts reuse an in-memory embedding memo, so repeats make no embedding call.
+2. Cosine similarity `a·b / (|a||b|)` is computed against entries under the same system prompt.
+3. Decision order: below `CACHE_THRESHOLD` (0.92) → miss; different numbers in the two questions → miss; similarity ≥ `CACHE_TRUST_ABOVE` (0.985) and no negation mismatch → hit; otherwise one cheap light-tier model check (YES → hit, NO or error → miss).
+4. Time-sensitive prompts (today, latest, news, weather, prices, scores) are neither served from nor stored in the cache. Only single-turn prompts are cached.
+5. **TTL by question type** (fixed when stored; hits never extend it): factual 7 days, code 3 days, general 24 hours, creative 6 hours. A background sweep removes expired entries every 10 minutes; at most 1 000 entries (LRU). Vectors are held as Float32 in memory and base64 on disk (~15 MB at the cap).
+
+**Formulas.** `hitRate = hits / (hits + misses)` over cacheable lookups. `embedCost = Σ ceil(chars/4) × EMBED_PRICE_PER_1M / 10⁶`. `netSaved = costSaved − verifyCost − embedCost`.
+
+### Threshold evaluation
+
+`scripts/tune-threshold.mjs` embeds 8 paraphrase pairs and 8 different-meaning pairs. With `SEMANTIC_SIMILARITY`, paraphrases scored 0.942–0.992 and different questions 0.829–0.911.
+
+| Threshold | Paraphrase hits | Wrong hits |
+|---|---|---|
+| 0.85 | 8/8 | 6/8 |
+| 0.90 | 8/8 | 1/8 |
+| **0.92** | **8/8** | **0/8** |
+| 0.95 | 6/8 | 0/8 |
+
+The model check blocked matches that embeddings alone accepted ("convert 10 miles to km" vs "convert 10 km to miles" at 0.981) while confirming real paraphrases.
+
+### Gemini errors
+
+The intermittent Gemini errors were not embedding rate limits (40 concurrent embedding calls all returned 200). Gemini chat models `gemini-3.8-flash` and `gemini-3.5-flash` frequently returned `503 high demand` or timed out, and one search could previously trigger up to four Gemini requests. Now a search makes at most one embedding call (none for repeats), cache verification uses a light model, Gemini falls back to `gemini-3.5-flash-lite` inside the same attempt, and the gateway fails over within the fixed timeout instead of surfacing the error.
+
+## Dashboard
+
+Open `http://localhost:3003/dashboard` (use `localhost` so key management is allowed). It receives live metrics over WebSocket (`/ws/metrics`, polling fallback) and analytics from `/v1/analytics`.
+
+- **Overview:** KPI cards, traffic chart, provider share, recent failovers, provider health strip.
+- **Analytics:** traffic by provider, p50/p95/p99 latency, cost vs savings, error types, per-provider and per-model tables, tier/task/policy usage, failover chains, cache funnel (15 min to 7 days).
+- **Providers:** state, disable reason, health check results, RPM/TPM meters, queue depth, cooldowns, test button.
+- **Routing:** how decisions are made, tier/task distribution, downgrades, capacity rejections.
+- **Logs:** every request with its attempt chain, candidate scores and exclusions.
+- **Playground:** send prompts with a policy, provider override, downgrade toggle and cache bypass.
+- **Settings:** add or replace keys for built-in providers, and add custom OpenAI-compatible providers from presets.
+
+Costs shown are **list-price estimates**, not provider invoices; free tiers may make the real bill zero.
 
 ## Getting started
 
 ### Prerequisites
 
-- Node.js 18 or newer
-- A free Groq API key: https://console.groq.com/keys
-- A free Gemini API key: https://aistudio.google.com/apikey
+- Node.js 18+ (tested on Node 24)
+- Docker (for Redis and the optional local Ollama model)
+- At least one provider key, e.g. Groq (https://console.groq.com/keys) or Gemini (https://aistudio.google.com/apikey). Gemini is also used for cache embeddings.
 
 ### Install and run
 
 ```bash
 git clone https://github.com/Rakshikagarg/CortexGate.git
-cd CortexGate/services/gateway
+cd CortexGate
+docker compose up -d                      # Redis (6380) and Ollama (11434)
+docker exec cortexgate_ollama ollama pull qwen2.5:0.5b   # optional local model
+cd services/gateway
 npm install
-cp .env.example .env     # then add your API keys
-npm start
+cp .env.example .env                      # add your keys
+npm start                                 # gateway on http://localhost:3003
+npm run worker                            # optional: processes rate-limited (queued) requests
 ```
 
-The gateway listens on `http://localhost:3000`. Open `http://localhost:3000/dashboard` for the live view.
+On Windows networks where Node cannot resolve MongoDB Atlas SRV records, set `DNS_SERVERS=8.8.8.8,1.1.1.1`.
 
 ### Try it
 
 ```bash
-# First request goes to a provider
-curl -s localhost:3000/v1/chat/completions -H "Content-Type: application/json" \
+# Routed automatically (light tier → fast cheap model)
+curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"What is the capital of France?"}]}'
 
-# Same question in different words is served from the cache
-curl -s localhost:3000/v1/chat/completions -H "Content-Type: application/json" \
+# Reworded question → served from cache ("provider": "cache")
+curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Which city is the capital of France?"}]}'
+
+# Heavy reasoning with the quality policy (never downgraded)
+curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
+  -H "x-routing-policy: quality" -H "x-cache: bypass" \
+  -d '{"messages":[{"role":"user","content":"Prove step by step that there are infinitely many primes."}]}'
 ```
 
-The second response has `"provider": "cache"`, `"cost": 0`, and a `cache` block with the similarity score and the cost and tokens saved.
-
-### Test provider failover
-
-To demo Gemini fallback, leave `GEMINI_API_KEY` configured, comment out or remove `GROQ_API_KEY` in `services/gateway/.env`, then submit a new prompt. The gateway watches `.env` and reloads key changes without a restart. Send `x-cache: bypass` (or use the dashboard's cache-bypass option) to ensure the query reaches a provider. The response should report `"provider": "gemini"`; if Gemini's configured model is overloaded or rate limited, it retries with `GEMINI_FALLBACK_MODEL`. The live dashboard's failover log shows which provider failed.
-
-Run the offline provider tests with:
+### Tests
 
 ```bash
-npm test
+npm test     # 119 offline tests: routing, capacity, failover, health checks, cache, key store, admin API, analytics
 ```
 
 ## API
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/chat/completions` | OpenAI-style chat completion through the gateway |
-| GET | `/v1/chat/stats` | Cache statistics: requests, hits, misses, hit rate, tokens and cost saved |
-| GET | `/v1/chat/live` | Statistics, provider health and the most recent requests (used by the dashboard) |
-| GET | `/v1/chat/summary` | Aggregated request and cost statistics from MongoDB |
-| POST | `/v1/chat/reset` | Clears the cache and request history |
-| GET | `/dashboard` | Live dashboard page |
-| GET | `/health` | Health check |
+| POST | `/v1/chat/completions` | OpenAI-style completion through routing, cache and failover |
+| GET | `/v1/models` | Routable models (`?all=1` includes unconfigured providers) |
+| GET | `/v1/chat/live` | Live stats: config, providers, routing, cache, totals, recent requests |
+| GET | `/v1/chat/providers` | Provider state, health, load and quotas |
+| GET | `/v1/analytics?range=15m\|1h\|24h\|7d` | Aggregated analytics |
+| GET | `/v1/chat/stats` | Cache statistics |
+| GET | `/v1/chat/summary` | MongoDB cost summary |
+| POST | `/v1/chat/reset` | Clear cache, history and provider state |
+| GET/PUT/DELETE | `/v1/admin/providers…` | Manage built-in keys and custom providers (localhost or `x-admin-token`) |
+| POST | `/v1/admin/providers/:name/test` | Send a 1-line test request to a provider |
+| GET | `/dashboard`, `/health` | Dashboard, health check |
+| WS | `/ws/metrics` | Live metrics every 2 s |
 
-**Request headers**
+**Request options:** `x-cache: bypass`; `x-provider: <name>` or body `provider`; body `model` as `provider/model`; `x-routing-policy: cost|balanced|quality` or body `routing_policy`; `x-allow-downgrade: true|false` or body `allow_downgrade`.
 
-- `x-cache: bypass` skips the cache for this request.
-- `x-provider: groq | gemini` (or `"provider"` in the body) tries that provider first; the others remain as failover.
-
-**Response additions.** On top of the standard OpenAI fields, responses include `provider` (`groq`, `gemini` or `cache`), `cost` (estimated USD at configured list prices, not a provider invoice amount) and a `cache` object.
+**Response additions:** `provider`, `cost` (estimate), `cache`, `routing` (tier, task, reason, estimated tokens, required quality, candidates, exclusions, downgrade, queue time) and `attempts` (provider, model, outcome, HTTP status, latency, error). Error responses carry `error.code` (`CAPACITY_EXHAUSTED`, `NO_PROVIDERS_AVAILABLE`, `FAILOVER_LIMIT_REACHED`, `ALL_PROVIDERS_FAILED`, …) and `Retry-After` when relevant.
 
 ## Configuration
 
-Set in `services/gateway/.env` (see `.env.example`).
+All settings live in `services/gateway/.env`; [`.env.example`](services/gateway/.env.example) lists every variable with its default. The main groups:
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3000` | Gateway port |
-| `GROQ_API_KEY` | none | Groq API key |
-| `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model |
-| `GEMINI_API_KEY` | none | Gemini API key (also used for embeddings) |
-| `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini chat model |
-| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash` | One alternate chat model to try if the configured Gemini model returns 429 or 503 |
-| `GEMINI_TIMEOUT_MS` | `20000` | Gemini request timeout in milliseconds; a timed-out request immediately moves to the next provider |
-| `PROVIDER_ORDER` | `groq,gemini` | Failover order |
-| `MONGODB_URI` | `mongodb://127.0.0.1:27017/cortexgate` | MongoDB URI for persistent request summaries |
-| `EMBEDDING_PROVIDER` | `gemini` | `gemini`, or `mock` for offline tests |
-| `EMBEDDING_MODEL` | `gemini-embedding-001` | Embedding model |
-| `EMBEDDING_TASK_TYPE` | `SEMANTIC_SIMILARITY` | Embedding task type; the 0.92 threshold was measured with this setting |
-| `CACHE_THRESHOLD` | `0.88` | Minimum cosine similarity for a candidate match |
-| `CACHE_TRUST_ABOVE` | `0.985` | At or above this a match is served directly; below it a model check confirms it first |
-| `CACHE_VERIFY` | `true` | Set to `false` to turn off the confirmation step |
-| `CACHE_TTL_MS` | `86400000` | Cache entry lifetime (24 hours) |
-| `CACHE_MAX_ENTRIES` | `500` | Maximum cache entries (least-recently-used eviction) |
-| `BREAKER_THRESHOLD` | `3` | Consecutive failures before a provider is skipped |
-| `BREAKER_COOLDOWN_MS` | `20000` | How long an unhealthy provider is skipped |
+| Group | Key variables (defaults) |
+|---|---|
+| Providers | `<P>_API_KEY`, `<P>_MODEL` (standard), `<P>_MODEL_LIGHT`, `<P>_MODEL_HEAVY`, `PROVIDER_ORDER`, `OLLAMA_BASE_URL`, `LMSTUDIO_BASE_URL` |
+| Routing | `ROUTING_POLICY` (balanced), `ROUTER_QUALITY_FLOOR_LIGHT/STANDARD/HEAVY` (0.40/0.60/0.80), `ROUTER_LOAD_PENALTY` (0.5), `RR_BUCKET_DELTA` (0.12), `ROUTER_ALLOW_DOWNGRADE` |
+| Capacity | `PROVIDER_MAX_INFLIGHT` (8), `<P>_RPM`, `<P>_TPM`, `CAPACITY_WAIT_MS` (2500), `CAPACITY_QUEUE_MAX` (20) |
+| Failover | `PROVIDER_TIMEOUT_MS` (10000), `MAX_FAILOVER_ATTEMPTS` (3), `REQUEST_BUDGET_MS` (25000), `RATE_LIMIT_COOLDOWN_MS` (30000), `AUTH_COOLDOWN_MS` (3600000), `BREAKER_THRESHOLD` (3), `BREAKER_COOLDOWN_MS` (20000) |
+| Health checks | `HEALTHCHECK_INTERVAL_MS` (60000), `HEALTHCHECK_TIMEOUT_MS` (5000) |
+| Cache | `CACHE_THRESHOLD` (0.92), `CACHE_TRUST_ABOVE` (0.985), `CACHE_VERIFY` (true), `CACHE_TTL_FACTUAL_MS` (7 d), `CACHE_TTL_CODE_MS` (3 d), `CACHE_TTL_MS` (24 h), `CACHE_TTL_CREATIVE_MS` (6 h), `CACHE_MAX_ENTRIES` (1000) |
+| Gateway rate limit | `REDIS_URL`, `RATE_LIMIT_MAX_TOKENS` (1000), `RATE_LIMIT_WINDOW_SEC` (60) |
+| Storage & security | `MONGODB_URI`, `DNS_SERVERS`, `ADMIN_TOKEN`, `CORTEX_SECRET_KEY` |
 
-MongoDB is optional for gateway operation: request history is also saved locally under `services/gateway/data/`. If MongoDB is not running at the configured URI, the dashboard uses local history and MongoDB-backed summaries are unavailable. Start MongoDB or set `MONGODB_URI` to a reachable MongoDB instance to enable those summaries. The database name in `MONGODB_URI` is honored; for example, `mongodb://127.0.0.1:27017/cortexgate` connects to the `cortexgate` database.
+Never commit `.env`. Dashboard-saved keys are encrypted in `services/gateway/data/providers.enc.json`; the encryption key is `CORTEX_SECRET_KEY` or a generated `data/.secret` (both under the git-ignored `data/` folder).
 
-Provider failover uses the configured `PROVIDER_ORDER`. If a provider rejects a request or model, the next provider is tried using its configured model (`GROQ_MODEL` or `GEMINI_MODEL`) rather than reusing a provider-specific model name. Gemini tries `GEMINI_FALLBACK_MODEL` once when its selected chat model responds with 429 or 503; if both Gemini models fail, the error is returned without repeating the same rate-limited request. MongoDB logging runs asynchronously and does not delay a completion or failover.
+## Project structure
 
-**Understanding dashboard costs.** “Estimated API Cost” is a token-based list-price estimate for successful chat completions plus cache-verification model calls; it is not the amount charged by Groq or Google. Provider free tiers/credits may make the real bill zero, and CortexGate does not read billing or quota data from either provider. Gemini embedding calls used to check the cache are currently not included, so the estimate understates total API usage when embeddings are metered. “Estimated Cost Avoided” is the gross list-price value of cached completions that were skipped. “After verification” subtracts model-check cost from that gross value, but still excludes embedding cost; therefore it is not a complete net savings or billing figure. A borderline cache check can cost more than a very short completion because it sends the stored answer and both questions to a model.
+```
+CortexGate/
+├── README.md, PROGRESS_LOG.md, PROJECT_SCOPE.md
+├── docker-compose.yml              # Redis + Ollama
+└── services/gateway/
+    ├── public/dashboard.html       # multi-page console (no build step)
+    ├── scripts/tune-threshold.mjs  # cache threshold evaluation
+    ├── test/                       # 119 node:test tests
+    └── src/
+        ├── index.js                # Express app, routers, WebSocket, health checker
+        ├── routes/                 # chat.js, admin.js, analytics.js
+        ├── gateway/                # router.js (classify + rank), dispatch.js (failover),
+        │                           # capacity.js, circuitBreaker.js, healthCheck.js,
+        │                           # providerStats.js, liveStatus.js, envWatcher.js
+        ├── providers/              # 15 adapters, openaiCompat.js, customProvider.js, keyStore.js
+        ├── cache/                  # embedder.js, semanticCache.js, verifier.js
+        ├── security/secrets.js     # AES-256-GCM key store
+        ├── stats/                  # requestLog.js, mongoLogger.js, analytics.js, persist.js
+        ├── middleware/rateLimit.js # Redis token bucket
+        ├── queues/, workers/       # BullMQ queue and worker
+        └── ws/metricsWs.js
+```
 
-Never commit `.env`; it holds your API keys.
+## Provider notes (checked Nov 26, 2026)
 
-## Evaluation: choosing the cache threshold
+Free tiers and quotas change; verify current terms before relying on them.
 
-The default of 0.92 was measured, not assumed. `scripts/tune-threshold.mjs` embeds 8 paraphrase pairs (should hit) and 8 different-meaning pairs (must miss, for example "capital of France" vs "capital of Italy") and reports hit rate against wrong hits.
-
-With default embeddings the two groups overlapped (best safe threshold 0.85 gave only 25% paraphrase hits). Using the `SEMANTIC_SIMILARITY` task type separated them: paraphrases scored 0.942 to 0.992, different questions 0.829 to 0.911.
-
-| Threshold | Paraphrase hits | Wrong hits |
-|---|---|---|
-| 0.85 | 8/8 | 6/8 |
-| 0.88 | 8/8 | 6/8 |
-| 0.90 | 8/8 | 1/8 |
-| **0.92** | **8/8** | **0/8** |
-| 0.95 | 6/8 | 0/8 |
-
-Reproduce with `node scripts/tune-threshold.mjs` from `services/gateway`. The sample is small (16 pairs) and a larger set is planned.
-
-**Update:** borderline matches are now confirmed by a model check against the stored answer. In live tests this blocked wrong matches that embeddings alone accepted ("convert 10 miles to km" vs "convert 10 km to miles" at 0.981, "boiling point in fahrenheit" vs "in celsius" at 0.928) while confirming real paraphrases ("distance from Mumbai to Delhi" vs "Delhi to Mumbai" at 0.971).
+| Provider | Status with the project's keys |
+|---|---|
+| Groq, NVIDIA NIM, OpenRouter (free models), Gemini (`3.5-flash-lite`), Ollama | Working |
+| Gemini `3.8-flash` / `3.5-flash` | Often `503 high demand`; handled by fallback and failover |
+| Mistral | Key expired (401): add a new key |
+| SambaNova | Requires a payment method (402) |
+| Hugging Face | Inference Providers need credits (402) |
+| GitHub Models | Endpoint returns plain-text "OK" for every request; disabled automatically |
+| Cerebras, Cloudflare, Cohere, Together, LM Studio | Adapters ready; add a key (or enable) to use |
 
 ## Known limitations
 
-- The semantic cache and dashboard history are saved to local JSON files (`services/gateway/data/`). MongoDB request logging is also implemented for cross-restart cost summaries; a vector database is still planned.
-- Time-sensitive prompts (today's date, current office holders) are not yet excluded from the cache.
-- A negated question ("is X not Y?") can match its positive form; a guard is planned.
+- Costs are list-price estimates; CortexGate does not read provider billing or remaining quota. RPM/TPM budgets are CortexGate-observed counts against configured limits.
+- Routing classification is heuristic; it is explainable and logged but not a guarantee of answer quality.
+- The cache is an in-memory vector list saved to JSON; a vector database is a future option for larger deployments.
 - The match check is a model's judgment and costs a few tokens per borderline match.
-- Only single-turn prompts are cached, since a multi-turn answer depends on earlier messages.
-- Dashboard costs are list-price estimates, not provider billing data. Free-tier use may be uncharged; cache embeddings are not currently included in estimates.
-
-## Roadmap
-
-1. Add one additional hosted provider and local Ollama support; standardize adapter behavior.
-2. Build explainable complexity/quality-aware routing with manual model overrides.
-3. Add configurable quota and rate controls, bounded retries, and optional request queueing.
-4. Complete embedding/verifier cost accounting and benchmark provider/cache quality.
-5. Expand dashboard provider, routing, cache, quota, and evaluation analytics; support secure custom OpenAI-compatible endpoints.
-
-See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for candidate providers, implementation phases, dashboard ideas, and stretch goals.
+- Dashboard key management is single-admin (localhost or one `ADMIN_TOKEN`); there are no user accounts.
 
 ## Team
 
@@ -255,8 +277,4 @@ See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for candidate providers, implementation
 
 ## Contributing
 
-Work on a feature branch, never directly on `main`. Add one line to [PROGRESS_LOG.md](PROGRESS_LOG.md) with each commit, and never commit `.env` or API keys.
-
-## Project scope
-
-See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for a summary of the work completed by midterm, the proposed post-midterm implementation, candidate no-subscription provider integrations, dashboard additions, and stretch goals. Provider free-tier terms and quotas change; verify current eligibility before planning around them.
+Add a line to [PROGRESS_LOG.md](PROGRESS_LOG.md) with each change, run `npm test` before committing, and never commit `.env`, `data/` or API keys.

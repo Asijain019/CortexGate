@@ -2,6 +2,20 @@
 
 This document separates the functionality implemented by the midterm from proposed work. Items in the future sections are plans, not claims about current gateway behavior. The project should aim to be a focused, self-hosted, cost- and quota-aware gateway; it should not claim to outperform LiteLLM across all use cases.
 
+## Post-midterm implementation status (Nov 26, 2026)
+
+The proposed post-midterm work below has been implemented, except where noted:
+
+| Proposal | Status |
+|---|---|
+| 1. Expand provider support | Done: 15 adapters (incl. Ollama, LM Studio, Cerebras, Cloudflare, Cohere, Together, Mistral, OpenRouter, Hugging Face) behind one OpenAI-compatible helper |
+| 2. Complexity- and quality-aware routing | Done: task classification, token estimates, quality floors, cost/balanced/quality policies, overrides, logged reasons and candidates |
+| 3. User-configured custom providers | Done: dashboard settings, connection test, encrypted keys (AES-256-GCM), localhost/admin-token access |
+| 4. Quota and request controls | Done: per-provider RPM/TPM budgets, in-flight caps, Retry-After cooldowns, bounded capacity queue, bounded failover, Redis rate limit + BullMQ queue |
+| 5. Cache correctness and cost accounting | Done: embedding/verifier/chat costs separated, net savings, time-sensitive bypass, negation and number guards, per-type TTLs |
+| 6. Provider evaluation and dashboard analytics | Analytics done (latency percentiles, errors, failovers, models, cache funnel); a curated provider quality benchmark set remains future work |
+| Stretch: vector DB, multi-user accounts, budgets/alerts | Not implemented |
+
 ## Work completed by midterm
 
 CortexGate currently provides:
@@ -21,7 +35,7 @@ Current limitations to keep visible in the demo:
 - Gemini embedding requests are not yet included in the cost estimate.
 - Cache matching is limited to single-turn requests and can still be risky for negated or time-sensitive questions.
 - Provider keys and limits are configured through environment variables; there is no dashboard for adding custom providers.
-- Routing follows configured provider order; it does not yet classify request complexity or select models by quality/cost.
+- Routing followed configured provider order at midterm (complexity/quality routing was added after midterm; see status above).
 
 ## Proposed post-midterm implementation
 
