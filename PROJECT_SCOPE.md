@@ -14,7 +14,8 @@ The proposed post-midterm work below has been implemented, except where noted:
 | 4. Quota and request controls | Done: per-provider RPM/TPM budgets, in-flight caps, Retry-After cooldowns, bounded capacity queue, bounded failover, Redis rate limit + BullMQ queue |
 | 5. Cache correctness and cost accounting | Done: embedding/verifier/chat costs separated, net savings, time-sensitive bypass, negation and number guards, per-type TTLs |
 | 6. Provider evaluation and dashboard analytics | Analytics done (latency percentiles, errors, failovers, models, cache funnel); a curated provider quality benchmark set remains future work |
-| Stretch: vector DB, multi-user accounts, budgets/alerts | Not implemented |
+| Deployment packaging and client authentication | Done: Docker Compose deployment, `cortexgate` CLI, client API keys with per-key limits, budgets and usage, admin token, deployment guide (docs/DEPLOY.md) |
+| Stretch: vector DB, multi-user dashboard accounts, alerts | Not implemented |
 
 ## Work completed by midterm
 

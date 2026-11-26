@@ -2,7 +2,7 @@
 
 **A self-hosted, LiteLLM-style AI gateway: one OpenAI-compatible endpoint in front of many LLM providers, with smart routing, bounded failover, semantic caching and a live analytics console.**
 
-> **Status (Nov 26, 2026): feature-complete prototype.** Smart quality/cost/token/load-aware routing, capacity-aware failover, active health checks, 15 provider adapters plus user-defined OpenAI-compatible providers, encrypted dashboard-managed API keys, semantic cache with per-type TTLs, analytics API and a multi-page dashboard are implemented and covered by 119 automated tests. See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the dated project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for scope.
+> **Status (Nov 26, 2026): feature-complete prototype.** Smart quality/cost/token/load-aware routing, capacity-aware failover, active health checks, 15 provider adapters plus user-defined OpenAI-compatible providers, encrypted dashboard-managed API keys, client API keys with per-key limits and budgets, semantic cache with per-type TTLs, analytics API, a multi-page dashboard, a Docker deployment and the `cortexgate` CLI are implemented and covered by 171 automated tests (132 gateway, 39 CLI). See [PROGRESS_LOG.md](PROGRESS_LOG.md) for the dated project record and [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for scope.
 
 *Major Project (PR1107), Institute of Engineering and Technology (IET), JK Lakshmipat University.*
 
@@ -37,8 +37,12 @@ CortexGate puts routing, caching, failover, quota control and cost accounting in
 | Multi-page dashboard: overview, analytics, providers, routing, logs, playground, settings | Implemented |
 | Gateway rate limiting (Redis token bucket) with BullMQ request queue and worker | Implemented |
 | MongoDB request logging, local JSON fallback, WebSocket live metrics | Implemented |
+| Client API keys (`cg-…`): hashed storage, per-key RPM/TPM, budgets, expiry, provider/policy restrictions, usage tracking | Implemented |
+| Auth modes (`auto` / `required` / `off`) and admin token for monitoring and key management | Implemented |
+| Docker deployment: gateway + worker + Redis + Ollama (+ optional MongoDB), restarts automatically | Implemented |
+| `cortexgate` CLI: init, start/stop/status/logs, keys, test, doctor (Docker or background Node mode) | Implemented |
 | Vector database for the cache (Qdrant / pgvector) | Future option |
-| Multi-user accounts, budgets, alerts | Stretch scope |
+| Multi-user dashboard accounts, alerts | Stretch scope |
 
 ## Architecture
 
@@ -141,13 +145,48 @@ Costs shown are **list-price estimates**, not provider invoices; free tiers may 
 - Docker (for Redis and the optional local Ollama model)
 - At least one provider key, e.g. Groq (https://console.groq.com/keys) or Gemini (https://aistudio.google.com/apikey). Gemini is also used for cache embeddings.
 
-### Install and run
+### Option 1: install with the CLI (recommended)
 
 ```bash
 git clone https://github.com/Rakshikagarg/CortexGate.git
 cd CortexGate
-docker compose up -d                      # Redis (6380) and Ollama (11434)
+npm install -g ./cli          # installs the `cortexgate` command
+cortexgate init               # asks for provider keys, generates ADMIN_TOKEN, encryption key and your first client key
+cortexgate start              # runs in the background (Docker mode, or --node without Docker)
+cortexgate status             # health, auth mode, provider summary
+cortexgate open               # opens the dashboard
+```
+
+**You choose your providers.** CortexGate ships with adapters for 15 providers, but nothing is preconfigured: each installation adds only the API keys it has (during `cortexgate init`, in `.env`, or later on the dashboard under Keys & providers), plus any OpenAI-compatible endpoint as a custom provider. Providers without a key are never used, and routing adapts automatically to whatever is configured (with no key at all, the local Ollama model can still serve requests).
+
+`init` merges into `services/gateway/.env` without overwriting existing values (a timestamped backup is made first) and prints the client key and admin token once. Other commands:
+
+| Command | What it does |
+|---|---|
+| `cortexgate start [--docker\|--node]` / `stop` / `restart` | Run the gateway (and queue worker) in the background |
+| `cortexgate status [--json]` | Health, uptime, auth mode, policy, Redis/Mongo, provider summary |
+| `cortexgate logs [-f] [--worker]` | Gateway or worker logs |
+| `cortexgate keys create <name> [--rpm N --tpm N --budget USD --expires ISO --providers a,b]` | Create a client key (shown once) |
+| `cortexgate keys list` / `disable` / `enable` / `revoke <id\|name>` | Manage client keys |
+| `cortexgate test "<prompt>" [--policy cost\|balanced\|quality] [--provider x]` | Send a request and show provider, model, tier, attempts, latency |
+| `cortexgate doctor` | Check Node, Docker, ports, `.env`, Redis, Ollama, MongoDB, health |
+
+See [cli/README.md](cli/README.md) for the full reference.
+
+### Option 2: Docker Compose
+
+```bash
+cp services/gateway/.env.example services/gateway/.env   # add keys, ADMIN_TOKEN and CORTEXGATE_BOOTSTRAP_KEY
+docker compose up -d                                     # gateway, worker, Redis, Ollama (restart automatically)
 docker exec cortexgate_ollama ollama pull qwen2.5:0.5b   # optional local model
+```
+
+The gateway listens on `127.0.0.1:3003` by default (`CORTEXGATE_PORT`, `CORTEXGATE_BIND` change it), keeps its data in the `gateway_data` volume, and runs with `CLIENT_AUTH=required`. Requests from the host reach the container from the Docker bridge, so use a client key for API calls and `ADMIN_TOKEN` for the dashboard (enter it under Keys & providers → Admin access). After editing `.env`, run `docker compose up -d` again. Add `--profile mongo` for a local MongoDB. To put CortexGate online (VPS with TLS, Render, Railway, Fly.io), follow [docs/DEPLOY.md](docs/DEPLOY.md).
+
+### Option 3: plain Node (development)
+
+```bash
+docker compose up -d redis ollama         # Redis (6380) and Ollama (11434)
 cd services/gateway
 npm install
 cp .env.example .env                      # add your keys
@@ -156,6 +195,35 @@ npm run worker                            # optional: processes rate-limited (qu
 ```
 
 On Windows networks where Node cannot resolve MongoDB Atlas SRV records, set `DNS_SERVERS=8.8.8.8,1.1.1.1`.
+
+## Client API keys
+
+Applications authenticate with CortexGate keys, never with provider keys. Keys look like `cg-…`, are stored only as SHA-256 hashes (`data/client-keys.json`) and are shown once at creation.
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:3003/v1", api_key="cg-...")
+client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "Hello"}])
+```
+
+`Authorization: Bearer cg-…` (OpenAI SDK default) and `x-api-key: cg-…` both work. Create keys with `cortexgate keys create`, on the dashboard (Keys & providers → API keys) or with `POST /v1/admin/keys`. Each key can have:
+
+- `rpmLimit` / `tpmLimit`: per-key rolling 60 s limits (Redis-backed) → `429 KEY_RATE_LIMITED` with `Retry-After`
+- `budgetUsd`: estimated spend cap (chat + verification + embedding cost) → `402 BUDGET_EXCEEDED`
+- `expiresAt` → `403 KEY_EXPIRED`; `enabled: false` → `403 KEY_DISABLED`
+- `allowedProviders` / `allowedPolicies` → `403 PROVIDER_NOT_ALLOWED` / `POLICY_NOT_ALLOWED`; failover never leaves the allowed set
+
+Usage (requests, tokens, spend, errors, last used) is tracked per key and shown in Analytics. Missing or unknown keys get `401 INVALID_API_KEY`.
+
+**Auth modes** (`CLIENT_AUTH`):
+
+| Mode | Chat API | Monitoring (live stats, analytics, WebSocket) |
+|---|---|---|
+| `auto` (default for `npm start`) | key required except from localhost | localhost or `ADMIN_TOKEN` |
+| `required` (default in Docker) | key always required | localhost or `ADMIN_TOKEN` |
+| `off` | open (startup warning) | open |
+
+Key and provider management (`/v1/admin/*`) is allowed from localhost while `ADMIN_TOKEN` is unset, and only with the token once it is set. `CORTEXGATE_BOOTSTRAP_KEY` imports a first key at startup (used by `cortexgate init` and Docker).
 
 ### Try it
 
@@ -201,7 +269,8 @@ curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
 ### Tests
 
 ```bash
-npm test     # 119 offline tests: routing, capacity, failover, health checks, cache, key store, admin API, analytics
+cd services/gateway && npm test   # 132 offline tests: routing, capacity, failover, health checks, cache, key stores, client auth, admin API, analytics
+cd cli && npm test                # 39 CLI tests: arguments, .env merge, secrets, config, status, end-to-end
 ```
 
 ## API
@@ -218,7 +287,9 @@ npm test     # 119 offline tests: routing, capacity, failover, health checks, ca
 | POST | `/v1/chat/reset` | Clear cache, history and provider state |
 | GET/PUT/DELETE | `/v1/admin/providers…` | Manage built-in keys and custom providers (localhost or `x-admin-token`) |
 | POST | `/v1/admin/providers/:name/test` | Send a 1-line test request to a provider |
-| GET | `/dashboard`, `/health` | Dashboard, health check |
+| GET/POST | `/v1/admin/keys` | List or create client API keys (create returns the key once) |
+| PATCH/DELETE | `/v1/admin/keys/:id` | Update limits/budget/expiry/enabled, reset spend, or revoke a key |
+| GET | `/dashboard`, `/health` | Dashboard, health check (`/health` also reports uptime and auth mode) |
 | WS | `/ws/metrics` | Live metrics every 2 s |
 
 **Request options:** `x-cache: bypass`; `x-provider: <name>` or body `provider`; body `model` as `provider/model`; `x-routing-policy: cost|balanced|quality` or body `routing_policy`; `x-allow-downgrade: true|false` or body `allow_downgrade`.
@@ -238,7 +309,9 @@ All settings live in `services/gateway/.env`; [`.env.example`](services/gateway/
 | Health checks | `HEALTHCHECK_INTERVAL_MS` (60000), `HEALTHCHECK_TIMEOUT_MS` (5000) |
 | Cache | `CACHE_THRESHOLD` (0.92), `CACHE_TRUST_ABOVE` (0.985), `CACHE_VERIFY` (true), `CACHE_TTL_FACTUAL_MS` (7 d), `CACHE_TTL_CODE_MS` (3 d), `CACHE_TTL_MS` (24 h), `CACHE_TTL_CREATIVE_MS` (6 h), `CACHE_MAX_ENTRIES` (1000) |
 | Gateway rate limit | `REDIS_URL`, `RATE_LIMIT_MAX_TOKENS` (1000), `RATE_LIMIT_WINDOW_SEC` (60) |
-| Storage & security | `MONGODB_URI`, `DNS_SERVERS`, `ADMIN_TOKEN`, `CORTEX_SECRET_KEY` |
+| Storage & security | `MONGODB_URI`, `DNS_SERVERS`, `ADMIN_TOKEN`, `CORTEX_SECRET_KEY`, `DATA_DIR` |
+| Client auth | `CLIENT_AUTH` (auto; required in Docker), `CORTEXGATE_BOOTSTRAP_KEY` |
+| Docker Compose only | `CORTEXGATE_PORT` (3003), `CORTEXGATE_BIND` (127.0.0.1) |
 
 Never commit `.env`. Dashboard-saved keys are encrypted in `services/gateway/data/providers.enc.json`; the encryption key is `CORTEX_SECRET_KEY` or a generated `data/.secret` (both under the git-ignored `data/` folder).
 
@@ -247,13 +320,17 @@ Never commit `.env`. Dashboard-saved keys are encrypted in `services/gateway/dat
 ```
 CortexGate/
 ├── README.md, PROGRESS_LOG.md, PROJECT_SCOPE.md
-├── docker-compose.yml              # Redis + Ollama
+├── docker-compose.yml              # gateway, worker, Redis, Ollama (+ optional MongoDB)
+├── docs/DEPLOY.md                  # VPS / Render / Railway / Fly.io deployment
+├── cli/                            # `cortexgate` CLI (no dependencies, 39 tests)
 └── services/gateway/
+    ├── Dockerfile, .dockerignore
     ├── public/dashboard.html       # multi-page console (no build step)
     ├── scripts/tune-threshold.mjs  # cache threshold evaluation
-    ├── test/                       # 119 node:test tests
+    ├── test/                       # 132 node:test tests
     └── src/
         ├── index.js                # Express app, routers, WebSocket, health checker
+        ├── auth/clientKeys.js      # client API keys (hashed), per-key limits and usage
         ├── routes/                 # chat.js, admin.js, analytics.js
         ├── gateway/                # router.js (classify + rank), dispatch.js (failover),
         │                           # capacity.js, circuitBreaker.js, healthCheck.js,
@@ -262,7 +339,7 @@ CortexGate/
         ├── cache/                  # embedder.js, semanticCache.js, verifier.js
         ├── security/secrets.js     # AES-256-GCM key store
         ├── stats/                  # requestLog.js, mongoLogger.js, analytics.js, persist.js
-        ├── middleware/rateLimit.js # Redis token bucket
+        ├── middleware/             # clientAuth.js (auth modes), rateLimit.js (Redis token bucket)
         ├── queues/, workers/       # BullMQ queue and worker
         └── ws/metricsWs.js
 ```
@@ -275,11 +352,12 @@ Free tiers and quotas change; verify current terms before relying on them.
 |---|---|
 | Groq, NVIDIA NIM, OpenRouter (free models), Gemini (`3.5-flash-lite`), Ollama | Working |
 | Gemini `3.8-flash` / `3.5-flash` | Often `503 high demand`; handled by fallback and failover |
-| Mistral | Key expired (401): add a new key |
+| Mistral | Key valid but returns 402 "subscription required": activate the free Experiment plan |
+| Cloudflare Workers AI | Token valid but lacks the Workers AI permission (401): create a token from the "Workers AI" template; needs `CLOUDFLARE_ACCOUNT_ID` (`CLOUDFLARE_API_KEY` is accepted as the token name) |
 | SambaNova | Requires a payment method (402) |
 | Hugging Face | Inference Providers need credits (402) |
 | GitHub Models | Endpoint returns plain-text "OK" for every request; disabled automatically |
-| Cerebras, Cloudflare, Cohere, Together, LM Studio | Adapters ready; add a key (or enable) to use |
+| Cerebras, Cohere, Together, LM Studio | Adapters ready; add a key (or enable) to use |
 
 ## Known limitations
 
@@ -287,7 +365,9 @@ Free tiers and quotas change; verify current terms before relying on them.
 - Routing classification is heuristic; it is explainable and logged but not a guarantee of answer quality.
 - The cache is an in-memory vector list saved to JSON; a vector database is a future option for larger deployments.
 - The match check is a model's judgment and costs a few tokens per borderline match.
-- Dashboard key management is single-admin (localhost or one `ADMIN_TOKEN`); there are no user accounts.
+- Dashboard administration is single-admin (localhost or one `ADMIN_TOKEN`); client API keys separate applications but there are no dashboard user accounts.
+- Requests queued by the gateway rate limiter (HTTP 202) are processed by the worker without being charged to the key's budget.
+- Inside Docker, `.env` changes need `docker compose up -d` (no live reload).
 
 ## Team
 
