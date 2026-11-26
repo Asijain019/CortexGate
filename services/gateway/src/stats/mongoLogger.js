@@ -1,4 +1,11 @@
+import dns from 'node:dns';
 import { MongoClient } from 'mongodb';
+
+// Optional: some Windows setups give Node a local DNS resolver that refuses the
+// SRV lookups mongodb+srv:// URIs need. DNS_SERVERS=8.8.8.8,1.1.1.1 overrides it.
+if (process.env.DNS_SERVERS) {
+  dns.setServers(process.env.DNS_SERVERS.split(',').map(s => s.trim()).filter(Boolean));
+}
 
 let client = null;
 let db = null;

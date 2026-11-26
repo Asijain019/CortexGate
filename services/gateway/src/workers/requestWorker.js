@@ -3,13 +3,9 @@ import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { dispatch } from '../gateway/dispatch.js';
 
-// Explicit Redis connection to the correct port
-const connection = new IORedis({
-  host: '127.0.0.1',
-  port: 6380,
-  maxRetriesPerRequest: null,
-});
-console.log('Worker Redis URL: redis://127.0.0.1:6380');
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380';
+const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+console.log(`Worker Redis URL: ${redisUrl}`);
 
 const worker = new Worker(
   'requestQueue',

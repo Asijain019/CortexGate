@@ -60,7 +60,15 @@ export async function sendChatCompletion({ messages, model }, options = {}) {
     throw error;
   }
 
-  const data = await response.json();
+  const rawBody = await response.text();
+  let data;
+  try {
+    data = JSON.parse(rawBody);
+  } catch (_) {
+    const error = new Error(`GitHub Models returned a non-JSON response: ${rawBody.trim().slice(0, 100)}`);
+    error.status = 502;
+    throw error;
+  }
   const choice = data.choices && data.choices[0];
   const content = choice?.message?.content || '';
 
