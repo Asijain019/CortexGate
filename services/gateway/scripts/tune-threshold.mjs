@@ -3,8 +3,8 @@
 // Uses only the embedding API - no chat provider calls. Run from services/gateway:
 //   node scripts/tune-threshold.mjs
 import 'dotenv/config';
-import { embed } from '../src/cache/embedder.js';
-import { cosineSimilarity } from '../src/cache/semanticCache.js';
+import { embedWithInfo, getEmbedderState } from '../src/cache/embedder.js';
+import { cosineSimilarity, sameNumbers, hasNegation } from '../src/cache/semanticCache.js';
 
 const SAME = [
   ['What is the capital of France?', 'Which city is the capital of France?'],
@@ -28,17 +28,22 @@ const DIFFERENT = [
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const memo = new Map();
+let apiCalls = 0;
+// embedWithInfo memoizes exact text, so each distinct sentence is embedded once.
 async function vec(text) {
-  if (memo.has(text)) return memo.get(text);
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const v = await embed(text);
-      memo.set(text, v);
-      await sleep(600); // be gentle with free-tier rate limits
-      return v;
+      const info = await embedWithInfo(text);
+      if (info.apiCall) { apiCalls++; await sleep(300); } // be gentle with free-tier rate limits
+      return info.vector;
     } catch (e) {
-      if (e.status === 429 && attempt < 2) { console.log('  rate limited, waiting 20s...'); await sleep(20000); continue; }
+      if (['EMBED_RATE_LIMITED', 'EMBED_COOLDOWN', 'EMBED_TIMEOUT'].includes(e.code) && attempt < 3) {
+        const until = getEmbedderState().cooldownUntil;
+        const wait = until ? Math.max(1000, Date.parse(until) - Date.now()) : 5000;
+        console.log(`  ${e.code}, waiting ${Math.round(wait / 1000)}s...`);
+        await sleep(wait);
+        continue;
+      }
       throw e;
     }
   }
@@ -62,11 +67,24 @@ show('DIFFERENT QUESTIONS (should be cache MISSES):', diff);
 
 console.log('\nThreshold | hit rate on paraphrases | wrong hits on different questions | precision');
 console.log('----------|-------------------------|-----------------------------------|----------');
-const thresholds = [0.70, 0.75, 0.80, 0.85, 0.88, 0.90, 0.92, 0.95];
+const thresholds = [0.70, 0.75, 0.80, 0.85, 0.88, 0.90, 0.92, 0.95, 0.985];
 for (const t of thresholds) {
   const tp = same.filter(r => r.sim >= t).length;
   const fp = diff.filter(r => r.sim >= t).length;
   const prec = tp + fp ? (tp / (tp + fp)) * 100 : 100;
   console.log(`   ${t.toFixed(2)}   |   ${String(tp).padStart(2)}/${same.length} (${((tp / same.length) * 100).toFixed(0).padStart(3)}%)        |   ${String(fp).padStart(2)}/${diff.length} wrong                       |  ${prec.toFixed(0)}%`);
 }
-console.log('\nPick the highest threshold that still gives a good hit rate with 0 wrong hits.');
+// Pairs that embeddings cannot tell apart; the cache's rule-based guards handle them.
+const GUARDED = [
+  ['Convert 10 miles to km', 'Convert 20 miles to km'],
+  ['Is placement good in JKLU?', 'Is placement not good in JKLU?'],
+  ['Foods that contain gluten', 'Foods without gluten']
+];
+console.log('\nGUARDED PAIRS (similarity / numeric guard / negation guard):');
+for (const r of await score(GUARDED)) {
+  const numeric = sameNumbers(r.a, r.b) ? 'same numbers' : 'NUMBERS DIFFER -> miss';
+  const neg = hasNegation(r.a) !== hasNegation(r.b) ? 'NEGATION MISMATCH -> verify/miss' : 'no negation mismatch';
+  console.log(`  ${r.sim.toFixed(3)}  "${r.a}" <-> "${r.b}"  [${numeric}; ${neg}]`);
+}
+console.log(`\nEmbedding API calls made: ${apiCalls} (memoized repeats excluded)`);
+console.log('Pick the highest threshold that still gives a good hit rate with 0 wrong hits (default CACHE_THRESHOLD=0.92).');
