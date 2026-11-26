@@ -125,7 +125,10 @@ export const MODEL_INFO = {
   'openai/gpt-4o-mini': M(0.7, 0, 0, 0.8, 131072),
   'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B': M(0.35, 0, 0, 0.6, 32768),
   'llama3.1-8b': M(0.55, 0, 0, 0.95, 8192),
-  '@cf/meta/llama-3.1-8b-instruct': M(0.52, 0, 0, 0.7, 8192),
+  // Cloudflare Workers AI (free daily allocation, then list price; checked 2026-11-26)
+  '@cf/meta/llama-3.1-8b-instruct-fast': M(0.52, 0.045, 0.384, 0.85, 8192),
+  '@cf/openai/gpt-oss-20b': M(0.64, 0.20, 0.30, 0.85, 131072),
+  '@cf/openai/gpt-oss-120b': M(0.80, 0.35, 0.75, 0.75, 131072),
   'command-r7b-12-2024': M(0.55, 0, 0, 0.75, 131072),
   'qwen2.5:0.5b': M(0.3, 0, 0, 0.4, 4096)
 };
@@ -142,7 +145,7 @@ const DEFAULTS = {
   github: [null, 'openai/gpt-4o-mini', null],
   huggingface: [null, 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B', null],
   cerebras: [null, 'llama3.1-8b', null],
-  cloudflare: [null, '@cf/meta/llama-3.1-8b-instruct', null],
+  cloudflare: ['@cf/meta/llama-3.1-8b-instruct-fast', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'],
   cohere: [null, 'command-r7b-12-2024', null],
   ollama: [null, 'qwen2.5:0.5b', null]
 };

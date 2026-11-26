@@ -260,7 +260,7 @@ curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
 | `What is the capital of Japan?` | light / factual → fast model |
 | `Write a Python function to merge two sorted lists` | standard / code (~700 output tokens) |
 | `Write a short poem about rain` | creative |
-| `Prove step by step that √2 is irrational and analyze each step` | heavy / reasoning → `groq/openai/gpt-oss-120b` |
+| `Prove step by step that √2 is irrational and analyze each step` | heavy / reasoning → gpt-oss-120b on Cloudflare or groq |
 | Same heavy query with policy `cost` vs `quality` | cheapest eligible vs never downgraded |
 | `What is the capital of Japan?` twice, then `Which city is Japan's capital?` (cache on) | 2nd and 3rd served from cache |
 | `What is the news today?` | never cached (time-sensitive) |
@@ -350,10 +350,10 @@ Free tiers and quotas change; verify current terms before relying on them.
 
 | Provider | Status with the project's keys |
 |---|---|
-| Groq, NVIDIA NIM, OpenRouter (free models), Gemini (`3.5-flash-lite`), Ollama | Working |
+| Groq, NVIDIA NIM, OpenRouter (free models), Gemini (`3.5-flash-lite`), Cloudflare Workers AI, Ollama | Working |
 | Gemini `3.8-flash` / `3.5-flash` | Often `503 high demand`; handled by fallback and failover |
 | Mistral | Key valid but returns 402 "subscription required": activate the free Experiment plan |
-| Cloudflare Workers AI | Token valid but lacks the Workers AI permission (401): create a token from the "Workers AI" template; needs `CLOUDFLARE_ACCOUNT_ID` (`CLOUDFLARE_API_KEY` is accepted as the token name) |
+| Cloudflare Workers AI | Working: llama-3.1-8b-fast (light), gpt-oss-20b (standard), gpt-oss-120b (heavy, second heavy-tier provider). Needs a "Workers AI" token and `CLOUDFLARE_ACCOUNT_ID` |
 | SambaNova | Requires a payment method (402) |
 | Hugging Face | Inference Providers need credits (402) |
 | GitHub Models | Endpoint returns plain-text "OK" for every request; disabled automatically |

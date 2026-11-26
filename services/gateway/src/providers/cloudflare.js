@@ -9,7 +9,7 @@ const adapter = createOpenAICompatAdapter({
   name: 'cloudflare', label: 'Cloudflare Workers AI',
   url: () => `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId())}/ai/v1/chat/completions`,
   keyEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY'], modelEnv: 'CLOUDFLARE_MODEL',
-  defaultModel: '@cf/meta/llama-3.1-8b-instruct',
+  defaultModel: '@cf/openai/gpt-oss-20b',
   configEnv: 'CLOUDFLARE_ACCOUNT_ID',
   isConfigured: () => Boolean(getProviderKey(['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY'], 'cloudflare') && accountId())
 });
