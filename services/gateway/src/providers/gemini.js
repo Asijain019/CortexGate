@@ -1,4 +1,8 @@
 import { providerError, fetchFailure, notConfigured, retryAfterFromResponse, costFromPricing } from './openaiCompat.js';
+import { getProviderKey } from './keyStore.js';
+
+// Dashboard-saved key (encrypted store) wins over GEMINI_API_KEY; resolved on every call.
+const apiKeyNow = () => getProviderKey(['GEMINI_API_KEY'], 'gemini');
 
 const M = 1_000_000;
 export const PRICING = {
@@ -18,7 +22,7 @@ const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const strip = m => String(m || '').trim().replace(/^models\//, '');
 
 export function isConfigured() {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
+  return Boolean(apiKeyNow());
 }
 
 export function calculateCost(usage, model) {
@@ -31,9 +35,9 @@ export function fallbackModels() {
 }
 
 export async function listAvailableModels() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = apiKeyNow();
   if (!apiKey) throw notConfigured('Gemini', 'GEMINI_API_KEY');
-  const response = await fetch(`${BASE}/models?key=${apiKey}`);
+  const response = await fetch(`${BASE}/models?key=${encodeURIComponent(apiKey)}`);
   if (!response.ok) throw providerError(`Gemini list-models error (status ${response.status})`, response.status);
   const data = await response.json();
   return (data.models || [])
@@ -71,7 +75,7 @@ function toPayload(messages) {
  * under the single options.signal deadline that dispatch provides.
  */
 export async function sendChatCompletion({ messages, model }, options = {}) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = apiKeyNow();
   if (!apiKey) throw notConfigured('Gemini', 'GEMINI_API_KEY');
 
   const timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '', 10);
@@ -88,7 +92,7 @@ export async function sendChatCompletion({ messages, model }, options = {}) {
     const last = i === models.length - 1;
     let response;
     try {
-      response = await fetcher(`${BASE}/models/${models[i]}:generateContent?key=${apiKey}`, {
+      response = await fetcher(`${BASE}/models/${encodeURIComponent(models[i])}:generateContent?key=${encodeURIComponent(apiKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,

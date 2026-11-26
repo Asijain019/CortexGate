@@ -3,18 +3,21 @@
 import * as persist from './persist.js';
 import { logRequestToMongo, warnMongoUnavailable } from './mongoLogger.js';
 
-const MAX_ENTRIES = 200;
+// Full local history (analytics fallback when MongoDB is down) vs. rows sent to /live.
+const MAX_ENTRIES = Math.max(200, parseInt(process.env.REQUEST_LOG_MAX || '5000', 10) || 5000);
+const LIVE_ENTRIES = 200;
 const inTest = Boolean(process.env.NODE_TEST_CONTEXT);
 const saved = inTest ? null : persist.load('requests', null);
 
-const recent = Array.isArray(saved?.recent) ? saved.recent : [];
+// `history` is newest first; persisted under the legacy key "recent".
+const history = Array.isArray(saved?.recent) ? saved.recent.slice(0, MAX_ENTRIES) : [];
 const totals = { requests: 0, spent: 0, failovers: 0, errors: 0, queued: 0, ...(saved?.totals || {}) };
 const byProvider = { ...(saved?.byProvider || {}) };
 let mongoWriteError = null;
 
 const persistNow = () => {
   if (inTest) return;
-  persist.save('requests', () => ({ recent, totals, byProvider }));
+  persist.save('requests', () => ({ recent: history, totals, byProvider }), 1500);
 };
 
 function buildRow(entry) {
@@ -44,8 +47,8 @@ function buildRow(entry) {
 }
 
 function push(row) {
-  recent.unshift(row);
-  if (recent.length > MAX_ENTRIES) recent.length = MAX_ENTRIES;
+  history.unshift(row);
+  if (history.length > MAX_ENTRIES) history.length = MAX_ENTRIES;
 }
 
 function toMongo(row) {
@@ -85,7 +88,12 @@ export async function recordQueued(entry = {}) {
 }
 
 export function getLive() {
-  return { totals, byProvider, recent };
+  return { totals, byProvider, recent: history.slice(0, LIVE_ENTRIES) };
+}
+
+/** Whole local history, newest first (do not mutate). */
+export function getHistory() {
+  return history;
 }
 
 export function hasMongoWriteError() {
@@ -93,7 +101,7 @@ export function hasMongoWriteError() {
 }
 
 export function clear() {
-  recent.length = 0;
+  history.length = 0;
   Object.assign(totals, { requests: 0, spent: 0, failovers: 0, errors: 0, queued: 0 });
   for (const k of Object.keys(byProvider)) delete byProvider[k];
   mongoWriteError = null;

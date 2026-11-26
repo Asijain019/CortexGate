@@ -64,7 +64,7 @@ export async function logRequestToMongo(entry) {
     const collection = database.collection('requests');
 
     const doc = {
-      ts: entry.ts || new Date().toISOString(),
+      ts: entry.ts || entry.time || new Date().toISOString(),
       prompt: entry.prompt || '',
       provider: entry.provider || 'unknown',
       cacheHit: Boolean(entry.cacheHit || entry.cache),
@@ -72,7 +72,9 @@ export async function logRequestToMongo(entry) {
       verified: entry.verified === true,
       verification: entry.verification || null,
       nearSimilarity: typeof entry.nearSimilarity === 'number' ? entry.nearSimilarity : null,
-      tokens: entry.tokens || entry.savedTokens || 0,
+      tokens: entry.tokens || 0,
+      savedTokens: entry.savedTokens || 0,
+      cost: entry.cost || 0,
       actualCost: entry.actualCost ?? ((entry.cost || 0) + (entry.verifyCost || 0)),
       counterfactualCost: entry.counterfactualCost || (entry.cache ? entry.savedCost : entry.cost) || 0,
       savedCost: entry.savedCost || 0,
@@ -85,7 +87,8 @@ export async function logRequestToMongo(entry) {
       verifyCost: entry.verifyCost || 0,
       embedCost: entry.embedCost || 0,
       status: entry.status || 'ok',
-      created_at: new Date()
+      cacheBypassed: entry.cacheBypassed === true,
+      created_at: entry.time ? new Date(entry.time) : new Date()
     };
 
     await collection.insertOne(doc);
@@ -109,7 +112,12 @@ export async function getMongoRecent(limit = 200) {
     .limit(limit)
     .toArray();
 
-  return docs.map(doc => ({
+  return docs.map(fromDoc);
+}
+
+/** Map a stored document back to the request-log row shape. */
+export function fromDoc(doc) {
+  return {
     time: doc.ts || doc.created_at?.toISOString?.() || '',
     prompt: doc.prompt || '',
     provider: doc.provider || 'unknown',
@@ -118,8 +126,10 @@ export async function getMongoRecent(limit = 200) {
     verified: doc.verified === true,
     verification: doc.verification || null,
     nearSimilarity: typeof doc.nearSimilarity === 'number' ? doc.nearSimilarity : null,
-    tokens: doc.tokens || 0,
-    cost: Math.max(0, (doc.actualCost || 0) - (doc.verifyCost || 0)),
+    // Older docs stored saved tokens in `tokens` for cache hits; cache hits use no tokens.
+    tokens: doc.cacheHit && doc.savedTokens === undefined ? 0 : (doc.tokens || 0),
+    savedTokens: doc.savedTokens || 0,
+    cost: typeof doc.cost === 'number' ? doc.cost : Math.max(0, (doc.actualCost || 0) - (doc.verifyCost || 0)),
     verifyCost: doc.verifyCost || 0,
     embedCost: doc.embedCost || 0,
     savedCost: doc.savedCost || 0,
@@ -129,8 +139,20 @@ export async function getMongoRecent(limit = 200) {
     model: doc.model || null,
     route: doc.route || null,
     attempts: doc.attempts || [],
-    status: doc.status || 'ok'
-  }));
+    status: doc.status || 'ok',
+    cacheBypassed: doc.cacheBypassed === true
+  };
+}
+
+/** Rows created at/after `from` (Date), newest first, for analytics. */
+export async function getMongoRange(from, limit = 20000) {
+  const database = await getDb();
+  const docs = await database.collection('requests')
+    .find({ created_at: { $gte: from } }, { projection: { prompt: 0 } })
+    .sort({ created_at: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map(d => ({ ...fromDoc(d), time: d.created_at?.toISOString?.() || d.ts || '' }));
 }
 
 /** Clear request history when the user explicitly resets demo data. */

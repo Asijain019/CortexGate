@@ -6,22 +6,36 @@ import { getStatus as rateLimitStatus } from '../middleware/rateLimit.js';
 import { providerNames, isConfigured, getProviderChain } from '../providers/index.js';
 import * as circuit from './circuitBreaker.js';
 import * as stats from './providerStats.js';
-import { catalogModels, normalizePolicy, providerTimeoutMs, maxInflight, rrWeight, TIERS } from './router.js';
+import { catalogModels, catalogContext, catalog, normalizePolicy, providerTimeoutMs, rrWeight, rrBucketDelta, rrTieDelta, loadPenalty, customCatalog, qualityFloor, TIERS } from './router.js';
+import * as capacity from './capacity.js';
+import { requestBudgetMs, maxFailoverAttempts } from './dispatch.js';
+import { getHealth, healthCheckIntervalMs } from './healthCheck.js';
+
+/** Built-in chain plus dashboard-registered custom providers. */
+function allProviderNames() {
+  const chain = getProviderChain();
+  for (const n of Object.keys(customCatalog())) if (!chain.includes(n) && providerNames().includes(n)) chain.push(n);
+  return chain;
+}
 
 /** The contract's `providers` object (also GET /v1/chat/providers). */
 export function buildProvidersPayload() {
   const status = circuit.getStatus(providerNames());
   const out = {};
-  for (const name of getProviderChain()) {
+  for (const name of allProviderNames()) {
     const configured = isConfigured(name);
     const b = status[name];
     const s = stats.summary(name);
     const state = configured ? b.state : 'unconfigured';
+    const u = capacity.usage(name);
+    const cat = catalog(name);
     out[name] = {
       configured,
       enabled: configured && state !== 'disabled',
       state,
       models: catalogModels(name),
+      contextWindow: catalogContext(name),
+      quality: { light: cat.light.quality, standard: cat.standard.quality, heavy: cat.heavy.quality },
       requests: s.requests,
       successes: s.successes,
       failures: s.failures,
@@ -30,10 +44,17 @@ export function buildProvidersPayload() {
       saturated: s.saturated,
       successRate: s.successRate,
       avgLatencyMs: s.avgLatencyMs,
+      p50LatencyMs: s.p50LatencyMs,
       p95LatencyMs: s.p95LatencyMs,
-      inflight: s.inflight,
-      maxInflight: maxInflight(),
+      inflight: u.inflight,
+      maxInflight: u.maxInflight,
+      rpm: u.rpm, rpmLimit: u.rpmLimit,
+      tpm: u.tpm, tpmLimit: u.tpmLimit,
+      queueDepth: u.queueDepth,
+      load: Math.round(u.load * 1000) / 1000,
       cooldownUntil: configured ? b.cooldownUntil : null,
+      disabledReason: configured ? b.disabledReason || null : null,
+      health: getHealth(name),
       lastError: s.lastError || b.lastError || null,
       lastErrorAt: s.lastErrorAt,
       rrWeight: rrWeight(name)
@@ -45,7 +66,7 @@ export function buildProvidersPayload() {
 /** OpenAI-style model list (GET /v1/models). */
 export function buildModelList({ all = false } = {}) {
   const data = [];
-  for (const name of getProviderChain()) {
+  for (const name of allProviderNames()) {
     const configured = isConfigured(name);
     if (!configured && !all) continue;
     const models = catalogModels(name);
@@ -65,7 +86,15 @@ function buildConfig(cache) {
   return {
     routingPolicy: normalizePolicy(),
     providerTimeoutMs: providerTimeoutMs(),
-    requestBudgetMs: parseInt(process.env.REQUEST_BUDGET_MS || '30000', 10),
+    requestBudgetMs: requestBudgetMs(),
+    maxFailoverAttempts: maxFailoverAttempts(),
+    rrBucketDelta: rrBucketDelta(),
+    loadPenalty: loadPenalty(),
+    healthCheckIntervalMs: healthCheckIntervalMs(),
+    rrTieDelta: rrTieDelta(),
+    capacityWaitMs: capacity.capacityWaitMs(),
+    capacityQueueMax: capacity.capacityQueueMax(),
+    qualityFloors: Object.fromEntries(TIERS.map(t => [t, qualityFloor(t)])),
     providerOrder: getProviderChain(),
     cacheThreshold: cache.threshold ?? parseFloat(process.env.CACHE_THRESHOLD || '0.88'),
     cacheTrustAbove: cache.trustAbove ?? parseFloat(process.env.CACHE_TRUST_ABOVE || '0.985'),

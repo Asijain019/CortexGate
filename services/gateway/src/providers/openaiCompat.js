@@ -5,6 +5,10 @@
 //
 // Every adapter honours options.signal (dispatch passes AbortSignal.timeout)
 // and throws errors shaped { status, code, retryAfterMs?, transient? }.
+//
+// Keys are resolved on every call through keyStore.getProviderKey, so a key saved
+// from the dashboard (encrypted at rest) overrides the env var without a restart.
+import { getProviderKey } from './keyStore.js';
 
 export function providerError(message, status, extra = {}) {
   return Object.assign(new Error(message), { status, ...extra });
@@ -88,25 +92,33 @@ export function costFromPricing(pricing, usage, model, fallbackModel) {
  *   name, label, url (string or () => string), keyEnv (string[]; empty = no key needed),
  *   modelEnv, defaultModel, pricing ({model: {prompt, completion}} per token),
  *   headers (extra headers), isConfigured (optional override),
- *   timeoutMs (optional () => number: provider-specific per-attempt timeout hint)
+ *   timeoutMs (optional () => number: provider-specific per-attempt timeout hint),
+ *   optionalKeyEnv (string[]: key sent if present but not required, e.g. a remote Ollama),
+ *   resolveKey (optional () => string: overrides env/dashboard lookup; used by custom providers)
  */
 export function createOpenAICompatAdapter(cfg) {
   const label = cfg.label || cfg.name;
   const keyEnv = cfg.keyEnv || [];
   const resolveUrl = () => (typeof cfg.url === 'function' ? cfg.url() : cfg.url);
   const defaultModel = () => (cfg.modelEnv && process.env[cfg.modelEnv]) || cfg.defaultModel;
+  const resolveKey = () => {
+    if (cfg.resolveKey) return cfg.resolveKey() || '';
+    if (keyEnv.length) return getProviderKey(keyEnv, cfg.name);
+    if (cfg.optionalKeyEnv?.length) return getProviderKey(cfg.optionalKeyEnv, cfg.name);
+    return '';
+  };
 
   function isConfigured() {
     if (cfg.isConfigured) return cfg.isConfigured();
-    return keyEnv.length === 0 || Boolean(firstEnv(keyEnv));
+    return keyEnv.length === 0 || Boolean(resolveKey());
   }
 
   function calculateCost(usage, model) {
     return costFromPricing(cfg.pricing, usage, model || defaultModel(), cfg.defaultModel);
   }
 
-  async function sendChatCompletion({ messages, model }, options = {}) {
-    const apiKey = firstEnv(keyEnv);
+  async function sendChatCompletion({ messages, model, max_tokens: maxTokens }, options = {}) {
+    const apiKey = resolveKey();
     if (keyEnv.length && !apiKey) throw notConfigured(label, keyEnv[0]);
     if (!isConfigured()) throw notConfigured(label, cfg.configEnv || 'configuration');
 
@@ -121,7 +133,11 @@ export function createOpenAICompatAdapter(cfg) {
       response = await fetcher(resolveUrl(), {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model: selectedModel, messages, ...(cfg.extraBody || {}) }),
+        body: JSON.stringify({
+          model: selectedModel, messages,
+          ...(Number.isInteger(maxTokens) && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
+          ...(cfg.extraBody || {})
+        }),
         signal
       });
     } catch (err) {

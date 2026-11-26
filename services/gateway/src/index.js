@@ -3,6 +3,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import chatRouter from './routes/chat.js';
+import adminRouter, { jsonErrorHandler as adminJsonErrors } from './routes/admin.js';
+import analyticsRouter from './routes/analytics.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import * as circuit from './gateway/circuitBreaker.js';
 import { watchEnv } from './gateway/envWatcher.js';
@@ -24,6 +26,10 @@ app.get('/v1/models', (req, res) => {
   res.json(buildModelList({ all: ['1', 'true'].includes(String(req.query.all || '').toLowerCase()) }));
 });
 
+// Admin (keys, custom providers) and analytics: not rate-limited; admin has its own auth.
+app.use('/v1/admin', adminRouter, adminJsonErrors);
+app.use('/v1/analytics', analyticsRouter);
+
 app.use('/v1/chat', rateLimit, chatRouter);
 
 // Live dashboard (polls /v1/chat/live or listens on /ws/metrics)
@@ -38,6 +44,11 @@ watchEnv(() => circuit.resetAll());
 const server = app.listen(PORT, () => {
   console.log(`CortexGate Gateway listening on port ${PORT}`);
   import('./ws/metricsWs.js').then(({ initWs }) => initWs(server));
+  // Active provider health checks (HEALTHCHECK_INTERVAL_MS, 0 = off; never under tests).
+  import('./gateway/healthCheck.js').then(({ startHealthChecks, stopHealthChecks }) => {
+    startHealthChecks();
+    server.on('close', stopHealthChecks);
+  });
 });
 
 export default app;

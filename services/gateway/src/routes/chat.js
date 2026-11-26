@@ -68,12 +68,16 @@ router.post('/completions', async (req, res) => {
     }
   }
 
-  const out = await dispatch({ messages, model, provider: providerParam, policy });
+  // Tier downgrade under load: body allow_downgrade or header x-allow-downgrade (default by policy).
+  const allowDowngrade = body.allow_downgrade ?? req.headers['x-allow-downgrade'];
+  const out = await dispatch({ messages, model, provider: providerParam, policy, allowDowngrade });
+  const r = out.routing;
   const routing = {
-    tier: out.routing.tier, task: out.routing.task, reason: out.routing.reason,
-    policy: out.routing.policy, estTokens: out.routing.estTokens
+    tier: r.tier, task: r.task, reason: r.reason, policy: r.policy, estTokens: r.estTokens,
+    estInputTokens: r.estInputTokens, estOutputTokens: r.estOutputTokens, requiredQuality: r.requiredQuality,
+    estCost: r.estCost, downgrade: r.downgrade, queuedMs: r.queuedMs, allowDowngrade: r.allowDowngrade
   };
-  const route = { ...routing, score: out.routing.score, override: out.routing.override };
+  const route = { ...r };
 
   const verification = cacheCtx.rejected ? 'rejected' : cacheCtx.verifyFailed ? 'failed' : null;
   const common = {
@@ -90,7 +94,7 @@ router.post('/completions', async (req, res) => {
     }
     await requestLog.record({
       provider: out.provider, model: out.model, cache: false, cost: out.cost,
-      tokens: out.result.usage?.total_tokens || 0, status: 'ok', ...common
+      tokens: out.result.usage?.total_tokens || 0, status: 'ok', cacheBypassed: !useCache, ...common
     });
     return res.json({
       id: completionId(),
@@ -108,13 +112,15 @@ router.post('/completions', async (req, res) => {
   }
 
   const status = out.error?.status || 502;
-  await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', ...common });
+  await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', cacheBypassed: !useCache, ...common });
+  if (out.error?.retryAfterSec) res.set('Retry-After', String(out.error.retryAfterSec));
   return res.status(status).json({
     error: {
       message: out.error?.message || 'Failed to process chat completion request across all configured providers',
       type: 'api_error',
       code: out.error?.code || 'ALL_PROVIDERS_FAILED',
-      status
+      status,
+      retry_after: out.error?.retryAfterSec
     },
     routing,
     attempts: out.attempts
