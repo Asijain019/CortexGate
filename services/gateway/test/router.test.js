@@ -1,0 +1,189 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { classify, route, scoreCandidate, normalizePolicy, catalog } from '../src/gateway/router.js';
+import { dispatch } from '../src/gateway/dispatch.js';
+import * as providerStats from '../src/gateway/providerStats.js';
+import { providers, isConfigured, getProviderChain } from '../src/providers/index.js';
+import { install, fake, ok, msg } from './helpers/fakes.js';
+
+test('classifier: short factual question -> light', () => {
+  const c = classify(msg('What is the capital of France?'));
+  assert.equal(c.task, 'factual');
+  assert.equal(c.tier, 'light');
+  assert.ok(c.score < 0.3);
+  assert.equal(c.estTokens, Math.ceil('What is the capital of France?'.length / 4));
+  assert.match(c.reason, /light tier/);
+});
+
+test('classifier: code request -> standard', () => {
+  const c = classify(msg('Write a Python function to reverse a linked list.'));
+  assert.equal(c.task, 'code');
+  assert.equal(c.tier, 'standard');
+  const fenced = classify(msg('Why does this crash?\n```js\nconst x = null; x.foo();\n```'));
+  assert.equal(fenced.task, 'code');
+});
+
+test('classifier: multi-step reasoning -> heavy', () => {
+  const c = classify(msg('Prove step by step that the square root of 2 is irrational, and analyze why the proof by contradiction works.'));
+  assert.equal(c.task, 'reasoning');
+  assert.equal(c.tier, 'heavy');
+});
+
+test('classifier: creative, summarize, greeting; length alone never reaches heavy', () => {
+  assert.equal(classify(msg('Write a short poem about autumn leaves')).task, 'creative');
+  assert.equal(classify(msg('hello there!')).tier, 'light');
+
+  const longDoc = 'The quarterly report covers revenue, hiring and logistics. '.repeat(150);
+  const sum = classify(msg(`Summarize this:\n${longDoc}`));
+  assert.equal(sum.task, 'summarize');
+  assert.equal(sum.tier, 'standard');
+  assert.ok(sum.estTokens > 1500);
+
+  const longChat = classify(msg('Tell me about my trip plans. '.repeat(300)));
+  assert.notEqual(longChat.tier, 'heavy');
+});
+
+test('policy normalisation: request value, then ROUTING_POLICY, then balanced', () => {
+  const prev = process.env.ROUTING_POLICY;
+  try {
+    delete process.env.ROUTING_POLICY;
+    assert.equal(normalizePolicy(), 'balanced');
+    process.env.ROUTING_POLICY = 'quality';
+    assert.equal(normalizePolicy(), 'quality');
+    assert.equal(normalizePolicy('COST'), 'cost');
+    assert.equal(normalizePolicy('nonsense'), 'quality');
+  } finally {
+    if (prev === undefined) delete process.env.ROUTING_POLICY; else process.env.ROUTING_POLICY = prev;
+  }
+});
+
+test('policy ranking: cost prefers the free model, quality prefers the strong model', () => {
+  const restore = install({ groq: fake(), nvidia: fake() }, { RR_BUCKET_DELTA: '0' });
+  try {
+    const cheap = route({ messages: msg('What is 2+2?'), policy: 'cost', tier: 'light' });
+    assert.equal(cheap.candidates[0].provider, 'nvidia');
+    assert.equal(cheap.policy, 'cost');
+
+    const strong = route({ messages: msg('Prove it rigorously'), policy: 'quality', tier: 'heavy' });
+    assert.equal(strong.candidates[0].provider, 'groq');
+    assert.equal(strong.candidates[0].model, catalog('groq').heavy.model);
+    assert.match(strong.reason, /policy quality/);
+
+    const low = { model: 'x', quality: 0.4, price: 0, speed: 0.8 };
+    const high = { model: 'y', quality: 0.85, price: 1.5, speed: 0.8 };
+    assert.ok(scoreCandidate('groq', low, 'standard', 'cost') > scoreCandidate('groq', high, 'standard', 'cost'));
+    assert.ok(scoreCandidate('groq', high, 'standard', 'quality') > scoreCandidate('groq', low, 'standard', 'quality'));
+  } finally {
+    restore();
+  }
+});
+
+test('health-aware: recent failures push a provider down the ranking', () => {
+  const restore = install({ groq: fake(), nvidia: fake() }, { RR_BUCKET_DELTA: '0' });
+  try {
+    const before = route({ messages: msg('hi'), policy: 'balanced', tier: 'light' });
+    const nvidiaBefore = before.candidates.find(c => c.provider === 'nvidia').score;
+    for (let i = 0; i < 10; i++) providerStats.recordFailure('nvidia', 'error', new Error('x'));
+    const after = route({ messages: msg('hi'), policy: 'balanced', tier: 'light' });
+    assert.ok(after.candidates.find(c => c.provider === 'nvidia').score < nvidiaBefore);
+    assert.equal(after.candidates[0].provider, 'groq');
+  } finally {
+    restore();
+  }
+});
+
+test('round robin rotates the first provider across requests within an equal bucket', async () => {
+  const same = 'openai/gpt-oss-20b';
+  const groq = fake(ok('groq'));
+  const sambanova = fake(ok('sambanova'));
+  const restore = install({ groq, sambanova }, {});
+  const prev = { g: process.env.GROQ_MODEL_LIGHT, s: process.env.SAMBANOVA_MODEL_LIGHT };
+  process.env.GROQ_MODEL_LIGHT = same;
+  process.env.SAMBANOVA_MODEL_LIGHT = same;
+  try {
+    const served = [];
+    for (let i = 0; i < 4; i++) served.push((await dispatch({ messages: msg('hi') })).provider);
+    assert.notEqual(served[0], served[1]);
+    assert.equal(served[0], served[2]);
+    assert.equal(served[1], served[3]);
+    assert.equal(groq.calls.length, 2);
+    assert.equal(sambanova.calls.length, 2);
+
+    // The non-chosen provider remains as a fallback.
+    const plan = route({ messages: msg('hi') });
+    assert.equal(plan.candidates.length, 2);
+  } finally {
+    restore();
+    for (const [k, v] of [['GROQ_MODEL_LIGHT', prev.g], ['SAMBANOVA_MODEL_LIGHT', prev.s]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
+
+test('weighted round robin honours <P>_RR_WEIGHT', () => {
+  const same = 'openai/gpt-oss-20b';
+  const restore = install({ groq: fake(), sambanova: fake() }, { GROQ_RR_WEIGHT: '2' });
+  process.env.GROQ_MODEL_LIGHT = same;
+  process.env.SAMBANOVA_MODEL_LIGHT = same;
+  try {
+    const firsts = [];
+    for (let i = 0; i < 6; i++) firsts.push(route({ messages: msg('hi') }).candidates[0].provider);
+    assert.equal(firsts.filter(p => p === 'groq').length, 4);
+    assert.equal(firsts.filter(p => p === 'sambanova').length, 2);
+  } finally {
+    restore();
+    delete process.env.GROQ_MODEL_LIGHT;
+    delete process.env.SAMBANOVA_MODEL_LIGHT;
+  }
+});
+
+test('explicit model / provider overrides go first', () => {
+  const restore = install({ groq: fake(), gemini: fake(), nvidia: fake() });
+  try {
+    const a = route({ messages: msg('hi'), model: 'gemini/gemini-3.5-flash' });
+    assert.deepEqual([a.candidates[0].provider, a.candidates[0].model], ['gemini', 'gemini-3.5-flash']);
+    assert.equal(a.override, 'model');
+
+    const b = route({ messages: msg('hi'), model: 'openai/gpt-oss-120b' }); // bare catalog id -> groq
+    assert.deepEqual([b.candidates[0].provider, b.candidates[0].model], ['groq', 'openai/gpt-oss-120b']);
+
+    const c = route({ messages: msg('hi'), provider: 'nvidia' });
+    assert.equal(c.candidates[0].provider, 'nvidia');
+    assert.equal(c.override, 'provider');
+    assert.equal(c.candidates.length, 3);
+  } finally {
+    restore();
+  }
+});
+
+test('unconfigured providers (cerebras, cloudflare, cohere, ollama) are excluded and never attempted', async () => {
+  const keys = ['CEREBRAS_API_KEY', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'COHERE_API_KEY', 'OLLAMA_BASE_URL', 'OLLAMA_ENABLED'];
+  const saved = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+  keys.forEach(k => delete process.env[k]);
+  const real = { cerebras: providers.cerebras, cloudflare: providers.cloudflare, cohere: providers.cohere, ollama: providers.ollama };
+  const groq = fake(ok());
+  const restore = install({ groq, ...real });
+  try {
+    for (const n of Object.keys(real)) assert.equal(isConfigured(n), false, n);
+    process.env.CLOUDFLARE_API_TOKEN = 'x'; // token without account id is still unconfigured
+    assert.equal(isConfigured('cloudflare'), false);
+    delete process.env.CLOUDFLARE_API_TOKEN;
+
+    assert.ok(getProviderChain().includes('cerebras'));
+    const plan = route({ messages: msg('hi'), provider: 'cerebras' });
+    assert.deepEqual(plan.candidates.map(c => c.provider), ['groq']);
+    assert.match(plan.reason, /cerebras' is not configured/);
+
+    const out = await dispatch({ messages: msg('hi'), provider: 'cohere' });
+    assert.equal(out.provider, 'groq');
+    assert.deepEqual(out.attempts.map(a => a.provider), ['groq']);
+
+    process.env.OLLAMA_ENABLED = 'true';
+    assert.equal(isConfigured('ollama'), true);
+  } finally {
+    restore();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});

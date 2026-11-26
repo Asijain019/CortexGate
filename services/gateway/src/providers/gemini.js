@@ -1,167 +1,145 @@
-import fetch from 'node-fetch';
+import { providerError, fetchFailure, notConfigured, retryAfterFromResponse, costFromPricing } from './openaiCompat.js';
 
-const PRICING = {
-  'gemini-3.8-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
-  'gemini-2.5-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
-  'gemini-2.0-flash': { prompt: 0.10 / 1_000_000, completion: 0.40 / 1_000_000 },
-  'gemini-1.5-flash': { prompt: 0.075 / 1_000_000, completion: 0.30 / 1_000_000 },
-  'gemini-1.5-pro': { prompt: 1.25 / 1_000_000, completion: 5.00 / 1_000_000 },
-  'gemini-1.0-pro': { prompt: 0.50 / 1_000_000, completion: 1.50 / 1_000_000 }
+const M = 1_000_000;
+export const PRICING = {
+  'gemini-3.8-flash': { prompt: 0.10 / M, completion: 0.40 / M },
+  'gemini-3.5-flash': { prompt: 0.10 / M, completion: 0.40 / M },
+  'gemini-3.5-flash-lite': { prompt: 0.05 / M, completion: 0.20 / M },
+  'gemini-2.5-flash': { prompt: 0.10 / M, completion: 0.40 / M },
+  'gemini-2.0-flash': { prompt: 0.10 / M, completion: 0.40 / M },
+  'gemini-1.5-flash': { prompt: 0.075 / M, completion: 0.30 / M },
+  'gemini-1.5-pro': { prompt: 1.25 / M, completion: 5.00 / M }
 };
 
 const DEFAULT_MODEL = 'gemini-3.8-flash';
-const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash';
-const DEFAULT_TIMEOUT_MS = 8_000;
+const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+const BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+const strip = m => String(m || '').trim().replace(/^models\//, '');
+
+export function isConfigured() {
+  return Boolean(process.env.GEMINI_API_KEY?.trim());
+}
 
 export function calculateCost(usage, model) {
-  if (!usage) return 0;
-  const targetModel = (model || process.env.GEMINI_MODEL || DEFAULT_MODEL).replace(/^models\//, '');
-  const rates = PRICING[targetModel] || PRICING[DEFAULT_MODEL];
-  const promptTokens = usage.prompt_tokens || usage.promptTokens || 0;
-  const completionTokens = usage.completion_tokens || usage.completionTokens || 0;
-  return (promptTokens * rates.prompt) + (completionTokens * rates.completion);
+  return costFromPricing(PRICING, usage, strip(model || process.env.GEMINI_MODEL || DEFAULT_MODEL), DEFAULT_MODEL);
+}
+
+/** GEMINI_FALLBACK_MODEL may be a comma-separated list. */
+export function fallbackModels() {
+  return (process.env.GEMINI_FALLBACK_MODEL || DEFAULT_FALLBACK_MODEL).split(',').map(strip).filter(Boolean);
 }
 
 export async function listAvailableModels() {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const error = new Error('GEMINI_API_KEY is not configured');
-    error.status = 500;
-    error.transient = false;
-    throw error;
-  }
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-  if (!response.ok) {
-    const error = new Error(`Gemini list-models error (status ${response.status})`);
-    error.status = response.status;
-    throw error;
-  }
+  if (!apiKey) throw notConfigured('Gemini', 'GEMINI_API_KEY');
+  const response = await fetch(`${BASE}/models?key=${apiKey}`);
+  if (!response.ok) throw providerError(`Gemini list-models error (status ${response.status})`, response.status);
   const data = await response.json();
   return (data.models || [])
     .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-    .map(m => m.name.replace(/^models\//, ''));
+    .map(m => strip(m.name));
 }
 
+// google.rpc.RetryInfo { retryDelay: "31s" } inside error.details
+function retryInfoMs(errorJson) {
+  const details = errorJson?.error?.details;
+  if (!Array.isArray(details)) return undefined;
+  for (const d of details) {
+    if (String(d['@type'] || '').includes('RetryInfo') && d.retryDelay) {
+      const secs = parseFloat(String(d.retryDelay));
+      if (Number.isFinite(secs)) return Math.round(secs * 1000);
+    }
+  }
+  return undefined;
+}
+
+function toPayload(messages) {
+  const text = c => (typeof c === 'string' ? c : JSON.stringify(c));
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const payload = {
+    contents: messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: text(m.content) }] }))
+  };
+  if (systemMessages.length) payload.systemInstruction = { parts: systemMessages.map(m => ({ text: text(m.content) })) };
+  return payload;
+}
+
+/**
+ * Tries the selected model, then each GEMINI_FALLBACK_MODEL on 429/503, all
+ * under the single options.signal deadline that dispatch provides.
+ */
 export async function sendChatCompletion({ messages, model }, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const error = new Error('GEMINI_API_KEY is not configured');
-    error.status = 500;
-    error.transient = false;
-    throw error;
+  if (!apiKey) throw notConfigured('Gemini', 'GEMINI_API_KEY');
+
+  const timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '', 10);
+  const signal = options.signal || AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10_000);
+  const fetcher = options.fetch || globalThis.fetch;
+  const payload = JSON.stringify(toPayload(messages));
+
+  const models = [];
+  for (const m of [strip(model || process.env.GEMINI_MODEL || DEFAULT_MODEL), ...fallbackModels()]) {
+    if (m && !models.includes(m)) models.push(m);
   }
-
-  let selectedModel = model || process.env.GEMINI_MODEL || DEFAULT_MODEL;
-  if (!selectedModel.startsWith('models/')) {
-    selectedModel = `models/${selectedModel}`;
-  }
-
-  // Format messages for Gemini API
-  let systemInstruction = undefined;
-  const systemMessages = messages.filter(m => m.role === 'system');
-  if (systemMessages.length > 0) {
-    systemInstruction = {
-      parts: systemMessages.map(m => ({
-        text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-      }))
-    };
-  }
-
-  const contents = messages
-    .filter(m => m.role !== 'system')
-    .map(m => {
-      const role = m.role === 'assistant' ? 'model' : 'user';
-      const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      return {
-        role,
-        parts: [{ text }]
-      };
-    });
-
-  const payload = { contents };
-  if (systemInstruction) {
-    payload.systemInstruction = systemInstruction;
-  }
-
-  const configuredTimeout = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '', 10);
-  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
-    ? configuredTimeout
-    : DEFAULT_TIMEOUT_MS;
-  const signal = options.signal || AbortSignal.timeout(timeoutMs);
-  const fetcher = options.fetch || fetch;
-  const fallbackModel = (process.env.GEMINI_FALLBACK_MODEL || DEFAULT_FALLBACK_MODEL)
-    .replace(/^models\//, '');
-  const models = [selectedModel.replace(/^models\//, '')];
-  if (fallbackModel !== models[0]) models.push(fallbackModel);
 
   for (let i = 0; i < models.length; i++) {
-    const currentModel = `models/${models[i]}`;
+    const last = i === models.length - 1;
     let response;
     try {
-      response = await fetcher(
-        `https://generativelanguage.googleapis.com/v1beta/${currentModel}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal
-        }
-      );
+      response = await fetcher(`${BASE}/models/${models[i]}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal
+      });
     } catch (err) {
-      if (err.name === 'AbortError' || err.name === 'TimeoutError' || signal.aborted) {
-        const error = new Error('Gemini request timed out');
-        error.status = 504;
-        error.code = 'PROVIDER_TIMEOUT';
-        if (i > 0) error.transient = false;
-        throw error;
-      }
-      const error = new Error(`Gemini network error: ${err.message}`);
-      error.status = 500;
-      if (i > 0) error.transient = false;
-      throw error;
+      const e = fetchFailure(err, 'Gemini', signal);
+      if (i > 0) e.transient = false;
+      throw e;
     }
 
     if (!response.ok) {
-      let errorMsg = `Gemini API error (status ${response.status})`;
+      let message = `Gemini API error (status ${response.status})`;
+      let errorJson = null;
       try {
-        const errorJson = await response.json();
-        if (errorJson.error?.message) errorMsg = errorJson.error.message;
-      } catch (_) {
-        // Ignore JSON parse error
-      }
-      const error = new Error(errorMsg);
-      error.status = response.status;
-      if ((response.status === 429 || response.status === 503) && i < models.length - 1) {
-        console.warn(`[Gemini] Model '${models[i]}' returned status ${response.status}; trying fallback model '${models[i + 1]}'`);
+        errorJson = await response.json();
+        if (errorJson?.error?.message) message = `Gemini: ${String(errorJson.error.message).slice(0, 300)}`;
+      } catch { /* non-JSON error body */ }
+      const error = providerError(message, response.status);
+      const retryAfterMs = retryAfterFromResponse(response) ?? retryInfoMs(errorJson);
+      if (retryAfterMs !== undefined) error.retryAfterMs = retryAfterMs;
+      if ((response.status === 429 || response.status === 503) && !last && !signal.aborted) {
+        console.warn(`[Gemini] Model '${models[i]}' returned ${response.status}; trying fallback model '${models[i + 1]}'`);
         continue;
       }
       if (i > 0) error.transient = false;
       throw error;
     }
 
-    const data = await response.json();
-    const candidate = data.candidates && data.candidates[0];
-    const parts = candidate?.content?.parts || [];
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      throw signal.aborted ? fetchFailure(err, 'Gemini', signal) : providerError('Gemini returned a non-JSON response', 502, { code: 'BAD_RESPONSE' });
+    }
+    const parts = data?.candidates?.[0]?.content?.parts || [];
     const content = parts.map(p => p.text || '').join('');
-
-    const usageMeta = data.usageMetadata || {};
-    const total = usageMeta.totalTokenCount || 0;
-    const prompt = usageMeta.promptTokenCount || 0;
-    const candidates = usageMeta.candidatesTokenCount || 0;
-
-    const usage = {
-      prompt_tokens: prompt,
-      completion_tokens: total ? Math.max(0, total - prompt) : candidates,
-      total_tokens: total || prompt + candidates
-    };
-
+    const u = data.usageMetadata || {};
+    const total = u.totalTokenCount || 0;
+    const prompt = u.promptTokenCount || 0;
+    const candidates = u.candidatesTokenCount || 0;
     return {
       content,
-      usage,
+      usage: {
+        prompt_tokens: prompt,
+        completion_tokens: total ? Math.max(0, total - prompt) : candidates,
+        total_tokens: total || prompt + candidates
+      },
       provider: 'gemini',
       model: data.modelVersion || models[i]
     };
   }
-
-  throw new Error('Gemini request failed without an API response');
+  throw providerError('Gemini request failed without an API response', 502);
 }

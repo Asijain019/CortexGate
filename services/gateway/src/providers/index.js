@@ -6,7 +6,12 @@ import * as sambanova from './sambanova.js';
 import * as mistral from './mistral.js';
 import * as huggingface from './huggingface.js';
 import * as github from './github.js';
+import * as ollama from './ollama.js';
+import * as cerebras from './cerebras.js';
+import * as cloudflare from './cloudflare.js';
+import * as cohere from './cohere.js';
 
+// Mutable map so tests can swap in fake adapters. `openai` is an alias of openrouter.
 export const providers = {
   groq,
   openrouter,
@@ -16,37 +21,46 @@ export const providers = {
   sambanova,
   mistral,
   huggingface,
-  github
+  github,
+  cerebras,
+  cloudflare,
+  cohere,
+  ollama
 };
 
+export const ALIASES = { openai: 'openrouter' };
+
+export const DEFAULT_ORDER =
+  'groq,openrouter,nvidia,gemini,cerebras,cloudflare,cohere,sambanova,mistral,huggingface,github,ollama';
+
+export function canonicalName(name) {
+  if (!name || typeof name !== 'string') return null;
+  const key = name.trim().toLowerCase();
+  const actual = ALIASES[key] || key;
+  return providers[actual] ? actual : null;
+}
+
+/** All real provider names (no aliases). */
+export function providerNames() {
+  return Object.keys(providers).filter(k => !ALIASES[k]);
+}
+
+/** Configured = the adapter says so (API key present etc.).
+ *  Adapters without isConfigured (test fakes) count as configured. */
+export function isConfigured(name) {
+  const adapter = providers[name];
+  if (!adapter) return false;
+  if (typeof adapter.isConfigured !== 'function') return true;
+  try { return Boolean(adapter.isConfigured()); } catch { return false; }
+}
+
+/** Requested provider first, then PROVIDER_ORDER, then any remaining providers. */
 export function getProviderChain(requestedProvider) {
-  const envOrder = (process.env.PROVIDER_ORDER || 'groq,openrouter,nvidia,gemini,sambanova,mistral,huggingface,github')
-    .split(',')
-    .map(s => s.trim().toLowerCase());
-
-  const available = Object.keys(providers).filter(k => k !== 'openai');
+  const envOrder = (process.env.PROVIDER_ORDER || DEFAULT_ORDER).split(',').map(s => s.trim()).filter(Boolean);
   const chain = [];
-
-  if (requestedProvider && typeof requestedProvider === 'string') {
-    const key = requestedProvider.toLowerCase();
-    const actual = key === 'openai' ? 'openrouter' : key;
-    if (providers[actual]) {
-      chain.push(actual);
-    }
-  }
-
-  for (const name of envOrder) {
-    const actual = name === 'openai' ? 'openrouter' : name;
-    if (providers[actual] && !chain.includes(actual)) {
-      chain.push(actual);
-    }
-  }
-
-  for (const name of available) {
-    if (!chain.includes(name)) {
-      chain.push(name);
-    }
-  }
-
+  const push = n => { const c = canonicalName(n); if (c && !chain.includes(c)) chain.push(c); };
+  if (requestedProvider) push(requestedProvider);
+  envOrder.forEach(push);
+  providerNames().forEach(push);
   return chain;
 }

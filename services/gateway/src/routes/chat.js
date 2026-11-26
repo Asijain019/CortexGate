@@ -1,45 +1,54 @@
 import { Router } from 'express';
-import { providers } from '../providers/index.js';
 import * as semanticCache from '../cache/semanticCache.js';
 import * as requestLog from '../stats/requestLog.js';
 import * as circuit from '../gateway/circuitBreaker.js';
+import * as providerStats from '../gateway/providerStats.js';
 import { dispatch } from '../gateway/dispatch.js';
-import { clearMongoRequests, getMongoRecent, getMongoSummary, warnMongoUnavailable } from '../stats/mongoLogger.js';
+import { classify, normalizePolicy, resetRoundRobin } from '../gateway/router.js';
+import { buildLivePayload, buildProvidersPayload } from '../gateway/liveStatus.js';
+import { clearMongoRequests, getMongoSummary } from '../stats/mongoLogger.js';
 
 const router = Router();
 
+const completionId = () => `chatcmpl-${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+
 router.post('/completions', async (req, res) => {
-  const { messages, model, provider: requestedProvider } = req.body || {};
+  const body = req.body || {};
+  const { messages, model } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({
-      error: {
-        message: "Invalid request: 'messages' must be a non-empty array.",
-        type: 'invalid_request_error'
-      }
+      error: { message: "Invalid request: 'messages' must be a non-empty array.", type: 'invalid_request_error' }
     });
   }
 
   const startedAt = Date.now();
   const promptPreview = String(messages[messages.length - 1]?.content ?? '').slice(0, 70);
+  const policy = normalizePolicy(body.routing_policy || req.headers['x-routing-policy']);
+  const providerParam = body.provider || req.headers['x-provider'];
 
   // --- Semantic cache lookup (skipped if x-cache: bypass) ---
   const useCache = req.headers['x-cache'] !== 'bypass';
-  let cacheCtx = { vector: null, hit: null, key: null, rejected: null, verifyCost: 0, verifyFailed: false };
+  let cacheCtx = { vector: null, hit: null, key: null, rejected: null, verifyCost: 0, verifyFailed: false, embedCost: 0 };
   if (useCache) {
     cacheCtx = await semanticCache.lookup(messages);
     if (cacheCtx.hit) {
       const { entry, similarity, verified } = cacheCtx.hit;
+      const cls = classify(messages);
+      const route = {
+        tier: cls.tier, task: cls.task, estTokens: cls.estTokens, score: cls.score, policy,
+        reason: `semantic cache hit (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''})`, override: null
+      };
       console.log(`[Gateway] CACHE HIT (similarity ${similarity.toFixed(3)}${verified ? ', verified' : ''}) - saved $${entry.cost.toFixed(6)}`);
       await requestLog.record({
-        provider: 'cache', cache: true, similarity, verified,
-        cost: 0, verifyCost: cacheCtx.verifyCost, savedCost: entry.cost,
-        savedTokens: entry.response.usage?.total_tokens || 0,
+        provider: 'cache', model: entry.response?.model || null, cache: true, similarity, verified,
+        cost: 0, verifyCost: cacheCtx.verifyCost || 0, embedCost: cacheCtx.embedCost || 0, savedCost: entry.cost,
+        tokens: 0, savedTokens: entry.response.usage?.total_tokens || 0,
         latencyMs: Date.now() - startedAt, prompt: promptPreview,
-        failedProviders: [], skippedProviders: [], status: 'ok'
+        failedProviders: [], skippedProviders: [], status: 'ok', route, attempts: []
       });
       return res.json({
-        id: `chatcmpl-${Date.now()}`,
+        id: completionId(),
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
         model: entry.response.model,
@@ -52,20 +61,27 @@ router.post('/completions', async (req, res) => {
           original_provider: entry.provider,
           saved_cost: entry.cost,
           saved_tokens: entry.response.usage?.total_tokens || 0
-        }
+        },
+        routing: { tier: route.tier, task: route.task, reason: route.reason, policy, estTokens: route.estTokens },
+        attempts: []
       });
     }
   }
 
-  const providerParam = requestedProvider || req.headers['x-provider'];
-  const out = await dispatch({ messages, model, providerParam });
+  const out = await dispatch({ messages, model, provider: providerParam, policy });
+  const routing = {
+    tier: out.routing.tier, task: out.routing.task, reason: out.routing.reason,
+    policy: out.routing.policy, estTokens: out.routing.estTokens
+  };
+  const route = { ...routing, score: out.routing.score, override: out.routing.override };
 
   const verification = cacheCtx.rejected ? 'rejected' : cacheCtx.verifyFailed ? 'failed' : null;
   const common = {
     latencyMs: Date.now() - startedAt, prompt: promptPreview,
-    failedProviders: out.failedProviders, skippedProviders: out.skipped,
+    failedProviders: out.failedProviders, skippedProviders: out.skippedProviders,
     verification, nearSimilarity: cacheCtx.rejected?.similarity ?? null,
-    verifyCost: cacheCtx.verifyCost || 0
+    verifyCost: cacheCtx.verifyCost || 0, embedCost: cacheCtx.embedCost || 0,
+    route, attempts: out.attempts
   };
 
   if (out.result) {
@@ -73,11 +89,11 @@ router.post('/completions', async (req, res) => {
       semanticCache.store({ vector: cacheCtx.vector, key: cacheCtx.key, response: out.result, cost: out.cost, provider: out.provider });
     }
     await requestLog.record({
-      provider: out.provider, cache: false, cost: out.cost,
+      provider: out.provider, model: out.model, cache: false, cost: out.cost,
       tokens: out.result.usage?.total_tokens || 0, status: 'ok', ...common
     });
     return res.json({
-      id: `chatcmpl-${Date.now()}`,
+      id: completionId(),
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
       model: out.result.model,
@@ -85,21 +101,23 @@ router.post('/completions', async (req, res) => {
       usage: out.result.usage,
       provider: out.provider,
       cost: out.cost,
-      cache: { hit: false, rejected_near_match: cacheCtx.rejected ? cacheCtx.rejected.similarity : undefined }
+      cache: { hit: false, bypassed: !useCache || undefined, rejected_near_match: cacheCtx.rejected ? cacheCtx.rejected.similarity : undefined },
+      routing,
+      attempts: out.attempts
     });
   }
 
-  const status = out.lastError?.status || 500;
+  const status = out.error?.status || 502;
   await requestLog.record({ provider: 'none', cache: false, cost: 0, status: 'error', ...common });
-  const providerFailureSummary = out.providerErrors?.map(({ provider, message }) => `${provider}: ${message}`).join('; ');
   return res.status(status).json({
     error: {
-      message: providerFailureSummary
-        ? `All configured providers failed. ${providerFailureSummary}`
-        : out.lastError?.message || 'Failed to process chat completion request across all configured providers',
+      message: out.error?.message || 'Failed to process chat completion request across all configured providers',
       type: 'api_error',
+      code: out.error?.code || 'ALL_PROVIDERS_FAILED',
       status
-    }
+    },
+    routing,
+    attempts: out.attempts
   });
 });
 
@@ -108,28 +126,12 @@ router.get('/stats', (req, res) => {
 });
 
 router.get('/live', async (req, res) => {
-  let recent = requestLog.getLive().recent;
-  let historySource = 'local';
-  let mongoAvailable = false;
-  try {
-    recent = await getMongoRecent();
-    mongoAvailable = true;
-    if (!requestLog.hasMongoWriteError()) historySource = 'mongodb';
-  } catch (err) {
-    warnMongoUnavailable(err);
-  }
-  if (historySource !== 'mongodb') recent = requestLog.getLive().recent;
+  res.set('Cache-Control', 'no-store');
+  res.json(await buildLivePayload());
+});
 
-  res.json({
-    cache: semanticCache.getStats(),
-    ...requestLog.getLive(),
-    recent,
-    persistence: {
-      mongodb: !mongoAvailable ? 'unavailable' : historySource === 'mongodb' ? 'connected' : 'degraded',
-      historySource
-    },
-    breakers: circuit.getStatus(Object.keys(providers))
-  });
+router.get('/providers', (req, res) => {
+  res.json(buildProvidersPayload());
 });
 
 // Wipe cache + history (handy before a demo). Require MongoDB so reset does not
@@ -147,7 +149,9 @@ router.post('/reset', async (req, res) => {
 
   semanticCache.clear();
   requestLog.clear();
+  providerStats.clear();
   circuit.resetAll();
+  resetRoundRobin();
   res.json({ ok: true, deletedCount });
 });
 

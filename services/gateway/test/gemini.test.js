@@ -86,3 +86,41 @@ test('Gemini does not retry after its fallback model is also rate limited', asyn
     else process.env.GEMINI_FALLBACK_MODEL = previousFallback;
   }
 });
+
+test('Gemini walks a comma-separated fallback list and parses RetryInfo', async () => {
+  const saved = ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_FALLBACK_MODEL'].map(k => [k, process.env[k]]);
+  const calls = [];
+  try {
+    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.GEMINI_MODEL = 'g-a';
+    process.env.GEMINI_FALLBACK_MODEL = 'g-b, g-c';
+    await assert.rejects(
+      sendChatCompletion({ messages: [{ role: 'user', content: 'hi' }] }, {
+        fetch: async url => {
+          calls.push(url);
+          return response(429, { error: { message: 'quota', details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '17s' }] } });
+        }
+      }),
+      e => e.status === 429 && e.retryAfterMs === 17000
+    );
+    assert.deepEqual(calls.map(u => u.match(/models\/([^:]+):/)[1]), ['g-a', 'g-b', 'g-c']);
+  } finally {
+    for (const [k, v] of saved) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
+test('Gemini maps an aborted signal to 504 PROVIDER_TIMEOUT', async () => {
+  const prev = process.env.GEMINI_API_KEY;
+  try {
+    process.env.GEMINI_API_KEY = 'test-key';
+    const ac = new AbortController();
+    const p = sendChatCompletion({ messages: [{ role: 'user', content: 'hi' }] }, {
+      signal: ac.signal,
+      fetch: (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' }))))
+    });
+    ac.abort();
+    await assert.rejects(p, e => e.status === 504 && e.code === 'PROVIDER_TIMEOUT');
+  } finally {
+    if (prev === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prev;
+  }
+});

@@ -78,7 +78,13 @@ export async function logRequestToMongo(entry) {
       savedCost: entry.savedCost || 0,
       latencyMs: entry.latencyMs || 0,
       failedProviders: entry.failedProviders || [],
-      status: entry.status || 200,
+      skippedProviders: entry.skippedProviders || [],
+      model: entry.model || null,
+      route: entry.route || null,
+      attempts: Array.isArray(entry.attempts) ? entry.attempts : [],
+      verifyCost: entry.verifyCost || 0,
+      embedCost: entry.embedCost || 0,
+      status: entry.status || 'ok',
       created_at: new Date()
     };
 
@@ -113,10 +119,16 @@ export async function getMongoRecent(limit = 200) {
     verification: doc.verification || null,
     nearSimilarity: typeof doc.nearSimilarity === 'number' ? doc.nearSimilarity : null,
     tokens: doc.tokens || 0,
-    cost: doc.actualCost || 0,
+    cost: Math.max(0, (doc.actualCost || 0) - (doc.verifyCost || 0)),
+    verifyCost: doc.verifyCost || 0,
+    embedCost: doc.embedCost || 0,
     savedCost: doc.savedCost || 0,
     latencyMs: doc.latencyMs || 0,
     failedProviders: doc.failedProviders || [],
+    skippedProviders: doc.skippedProviders || [],
+    model: doc.model || null,
+    route: doc.route || null,
+    attempts: doc.attempts || [],
     status: doc.status || 'ok'
   }));
 }
@@ -178,7 +190,7 @@ export async function getMongoSummary() {
       totalTokens: res.totalTokens || 0,
       cacheHits: res.cacheHits || 0,
       cacheMisses: res.cacheMisses || 0,
-      hitRate: res.totalRequests ? (res.cacheHits / res.totalRequests) : 0
+      hitRate: res.totalRequests ? (res.cacheHits / res.totalRequests) : 0 // share of all logged requests served from cache
     };
   } catch (err) {
     warnMongoUnavailable(err);

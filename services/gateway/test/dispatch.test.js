@@ -1,127 +1,93 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { providers } from '../src/providers/index.js';
-import * as circuit from '../src/gateway/circuitBreaker.js';
 import { dispatch } from '../src/gateway/dispatch.js';
+import * as circuit from '../src/gateway/circuitBreaker.js';
+import * as providerStats from '../src/gateway/providerStats.js';
+import { catalogModels } from '../src/gateway/router.js';
+import { install, fake, ok, fail, msg } from './helpers/fakes.js';
 
-test('failover switches providers and uses the fallback provider model', async () => {
-  const previousOrder = process.env.PROVIDER_ORDER;
-  const previousGroq = providers.groq;
-  const previousGemini = providers.gemini;
-  const calls = [];
-
+test('failover switches providers and the fallback uses its own model', async () => {
+  const groq = fake(fail(404, 'Model not found'));
+  const gemini = fake(ok('fallback response'));
+  const restore = install({ groq, gemini });
   try {
-    process.env.PROVIDER_ORDER = 'groq,gemini';
-    circuit.resetAll();
-    providers.groq = {
-      async sendChatCompletion({ model }) {
-        calls.push({ provider: 'groq', model });
-        throw Object.assign(new Error('Model not found'), { status: 404 });
-      },
-      calculateCost: () => 0
-    };
-    providers.gemini = {
-      async sendChatCompletion({ model }) {
-        calls.push({ provider: 'gemini', model });
-        return { content: 'fallback response', usage: {}, model: 'gemini-default' };
-      },
-      calculateCost: () => 0
-    };
-
-    const result = await dispatch({
-      messages: [{ role: 'user', content: 'hello' }],
-      model: 'groq-only-model'
-    });
-
-    assert.equal(result.provider, 'gemini');
-    assert.deepEqual(result.failedProviders, ['groq']);
-    assert.deepEqual(calls, [
-      { provider: 'groq', model: 'groq-only-model' },
-      { provider: 'gemini', model: undefined }
+    const out = await dispatch({ messages: msg('hello'), model: 'groq/groq-only-model' });
+    assert.equal(out.provider, 'gemini');
+    assert.equal(out.result.content, 'fallback response');
+    assert.deepEqual(out.failedProviders, ['groq']);
+    assert.equal(groq.calls[0].model, 'groq-only-model');
+    assert.notEqual(gemini.calls[0].model, 'groq-only-model');
+    assert.equal(gemini.calls[0].model, catalogModels('gemini')[out.routing.tier]);
+    assert.deepEqual(out.attempts.map(a => [a.provider, a.outcome, a.httpStatus]), [
+      ['groq', 'error', 404],
+      ['gemini', 'ok', 200]
     ]);
+    assert.equal(out.routing.override, 'model');
   } finally {
-    providers.groq = previousGroq;
-    providers.gemini = previousGemini;
-    if (previousOrder === undefined) delete process.env.PROVIDER_ORDER;
-    else process.env.PROVIDER_ORDER = previousOrder;
-    circuit.resetAll();
+    restore();
   }
 });
 
-test('a provider timeout skips same-provider retries and fails over immediately', async () => {
-  const previousOrder = process.env.PROVIDER_ORDER;
-  const previousGroq = providers.groq;
-  const previousGemini = providers.gemini;
-  const calls = [];
-
+test('a provider timeout error skips same-provider retries and fails over immediately', async () => {
+  const groq = fake(fail(504, 'Request timed out'));
+  const gemini = fake(ok());
+  const restore = install({ groq, gemini }, { PROVIDER_MAX_RETRIES: '2' });
   try {
-    process.env.PROVIDER_ORDER = 'groq,gemini';
-    circuit.resetAll();
-    providers.groq = {
-      async sendChatCompletion() {
-        calls.push('groq');
-        throw Object.assign(new Error('Request timed out'), {
-          status: 504
-        });
-      },
-      calculateCost: () => 0
-    };
-    providers.gemini = {
-      async sendChatCompletion() {
-        calls.push('gemini');
-        return { content: 'fallback response', usage: {}, model: 'gemini-default' };
-      },
-      calculateCost: () => 0
-    };
-
-    const result = await dispatch({ messages: [{ role: 'user', content: 'hello' }] });
-
-    assert.equal(result.provider, 'gemini');
-    assert.deepEqual(calls, ['groq', 'gemini']);
+    const out = await dispatch({ messages: msg('hello'), provider: 'groq' });
+    assert.equal(out.provider, 'gemini');
+    assert.equal(groq.calls.length, 1);
+    assert.equal(out.attempts[0].outcome, 'timeout');
   } finally {
-    providers.groq = previousGroq;
-    providers.gemini = previousGemini;
-    if (previousOrder === undefined) delete process.env.PROVIDER_ORDER;
-    else process.env.PROVIDER_ORDER = previousOrder;
-    circuit.resetAll();
+    restore();
   }
 });
 
-test('a skipped primary provider does not pass its model to Gemini', async () => {
-  const previousOrder = process.env.PROVIDER_ORDER;
-  const previousThreshold = process.env.BREAKER_THRESHOLD;
-  const previousGroq = providers.groq;
-  const previousGemini = providers.gemini;
-  const calls = [];
-
+test('a provider with an open breaker is tried last and reported as skipped', async () => {
+  const groq = fake(ok('groq'));
+  const gemini = fake(ok('gemini'));
+  const restore = install({ groq, gemini }, { BREAKER_THRESHOLD: '1' });
   try {
-    process.env.PROVIDER_ORDER = 'groq,gemini';
-    process.env.BREAKER_THRESHOLD = '1';
-    circuit.resetAll();
     circuit.recordFailure('groq', new Error('Groq unavailable'));
-    providers.gemini = {
-      async sendChatCompletion({ model }) {
-        calls.push(model);
-        return { content: 'fallback response', usage: {}, model: 'gemini-default' };
-      },
-      calculateCost: () => 0
-    };
-
-    const result = await dispatch({
-      messages: [{ role: 'user', content: 'hello' }],
-      model: 'groq-only-model'
-    });
-
-    assert.equal(result.provider, 'gemini');
-    assert.deepEqual(result.skipped, ['groq']);
-    assert.deepEqual(calls, [undefined]);
+    assert.equal(circuit.getState('groq'), 'open');
+    const out = await dispatch({ messages: msg('hello') });
+    assert.equal(out.provider, 'gemini');
+    assert.equal(groq.calls.length, 0);
+    assert.ok(out.skippedProviders.includes('groq'));
+    assert.deepEqual(out.skipped, out.skippedProviders);
   } finally {
-    providers.groq = previousGroq;
-    providers.gemini = previousGemini;
-    if (previousOrder === undefined) delete process.env.PROVIDER_ORDER;
-    else process.env.PROVIDER_ORDER = previousOrder;
-    if (previousThreshold === undefined) delete process.env.BREAKER_THRESHOLD;
-    else process.env.BREAKER_THRESHOLD = previousThreshold;
-    circuit.resetAll();
+    restore();
+  }
+});
+
+test('verifier call signature: dispatch({ messages, tier, purpose }) uses the light tier and is not counted', async () => {
+  const groq = fake(ok('YES'));
+  const restore = install({ groq });
+  try {
+    const before = providerStats.getRouting();
+    const long = 'Analyze and prove step by step, then compare the trade-offs. '.repeat(20);
+    const out = await dispatch({ messages: msg(long), tier: 'light', purpose: 'verify' });
+    assert.equal(out.result.content, 'YES');
+    assert.equal(out.routing.tier, 'light');
+    assert.equal(groq.calls[0].model, catalogModels('groq').light);
+    assert.deepEqual(providerStats.getRouting(), before);
+
+    // Plain legacy call still works.
+    const legacy = await dispatch({ messages: msg('hi') });
+    assert.equal(legacy.provider, 'groq');
+  } finally {
+    restore();
+  }
+});
+
+test('no configured providers -> 503 NO_PROVIDERS_AVAILABLE', async () => {
+  const restore = install({});
+  try {
+    const out = await dispatch({ messages: msg('hello') });
+    assert.equal(out.result, null);
+    assert.equal(out.error.status, 503);
+    assert.equal(out.error.code, 'NO_PROVIDERS_AVAILABLE');
+    assert.deepEqual(out.attempts, []);
+  } finally {
+    restore();
   }
 });
