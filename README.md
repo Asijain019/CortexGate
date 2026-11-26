@@ -174,6 +174,30 @@ curl -s localhost:3003/v1/chat/completions -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Prove step by step that there are infinitely many primes."}]}'
 ```
 
+### Live demo guide
+
+**Failover by stopping a provider** (a real outage):
+1. Playground → Provider `ollama`, enable cache bypass, send `What is an API?` → served by `ollama`.
+2. `docker stop cortexgate_ollama`, then send again → attempt chain `ollama ✕ → groq ✓`; see Logs and Analytics → Fallback flow.
+3. `docker start cortexgate_ollama` → the health check marks it healthy again within ~60 s.
+
+**Failover by breaking a key** (no restart; `.env` is reloaded live): change one character of `GROQ_API_KEY` → next request shows `groq ✕ 401 → nvidia ✓` and groq becomes *Disabled · Auth failed*; restore the key to re-enable it.
+
+**Capacity and downgrade:** set `GROQ_MAX_INFLIGHT=1`, restart, and send the heavy query below three times quickly. With policy `quality`: one served, one queued then served, one `503 CAPACITY_EXHAUSTED`. With `balanced`: overflow requests are downgraded heavy → standard and the banner shows why.
+
+**Routing test queries** (enable cache bypass and expand the routing decision card):
+
+| Query | Expected |
+|---|---|
+| `What is the capital of Japan?` | light / factual → fast model |
+| `Write a Python function to merge two sorted lists` | standard / code (~700 output tokens) |
+| `Write a short poem about rain` | creative |
+| `Prove step by step that √2 is irrational and analyze each step` | heavy / reasoning → `groq/openai/gpt-oss-120b` |
+| Same heavy query with policy `cost` vs `quality` | cheapest eligible vs never downgraded |
+| `What is the capital of Japan?` twice, then `Which city is Japan's capital?` (cache on) | 2nd and 3rd served from cache |
+| `What is the news today?` | never cached (time-sensitive) |
+| `What is 15 miles in km?` then `What is 25 miles in km?` | no cache hit (number guard) |
+
 ### Tests
 
 ```bash

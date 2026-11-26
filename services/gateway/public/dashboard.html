@@ -296,6 +296,8 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--surface-2) 70%, trans
 th.right, td.right { text-align: right; }
 td.num, td.right { white-space: nowrap; }
 td .chain.nw { flex-wrap: nowrap; }
+td .chain.nw > * { flex: none; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 td .mono.muted { white-space: nowrap; }
 .sortbtn { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; display: inline-flex; gap: 4px; align-items: center; }
 .sortbtn:hover { color: var(--text); }
@@ -367,14 +369,28 @@ tr.chosen > td { background: var(--accent-bg) !important; }
 .feed .meta > span:first-child { flex-shrink: 1; }
 
 /* ---------- Routing explainer ---------- */
-.steps { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: st; }
-.steps li { display: grid; grid-template-columns: 26px 1fr; gap: 14px; counter-increment: st; position: relative; padding-bottom: 16px; }
-.steps li:last-child { padding-bottom: 0; }
-.steps li:not(:last-child)::after { content: ""; position: absolute; left: 12.5px; top: 30px; bottom: 4px; width: 1px; background: var(--border-strong); }
-.steps li::before { content: counter(st); width: 26px; height: 26px; border-radius: 50%; background: var(--accent-bg); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 12px; }
-.steps b { display: block; margin: 3px 0 2px; font-weight: 600; }
-.steps p { margin: 0; color: var(--text-2); font-size: 12.5px; }
-.steps p strong { color: var(--text); font-weight: 600; }
+.pipe { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; counter-reset: st; }
+.pipe li { display: flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 120px; }
+.pipe li:last-child { flex-grow: .86; }
+.pipe li:not(:last-child)::after { content: "→"; color: var(--muted); font-size: 12px; padding: 0 2px; }
+.pipe .st { flex: 1; display: grid; gap: 6px; min-width: 104px; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--r-2); background: var(--surface-2); cursor: default; counter-increment: st; }
+.pipe .st > b { font-size: 12px; font-weight: 600; display: flex; gap: 6px; align-items: baseline; }
+.pipe .st > b::before { content: counter(st); font-family: var(--mono); font-size: 10px; color: var(--muted); font-weight: 500; }
+.pipe .st > span { display: flex; flex-wrap: nowrap; gap: 4px; }
+.pipe .chip { height: 18px; padding: 0 6px; font-size: 10.5px; font-family: var(--mono); }
+.pipe-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: var(--sp-3); font-size: 11.5px; color: var(--muted); }
+.pipe-meta .mono { color: var(--text-2); }
+details.how { margin-top: var(--sp-3); border-top: 1px solid var(--border); padding-top: var(--sp-3); font-size: 12px; }
+details.how summary { cursor: pointer; color: var(--text-2); font-weight: 500; width: max-content; }
+details.how summary:hover { color: var(--text); }
+details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); display: grid; gap: 4px; }
+.dist2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+@media (max-width: 760px) { .dist2 { grid-template-columns: 1fr; } }
+.est { font-size: 10px; font-weight: 500; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; margin-left: 6px; cursor: help; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
+.ii { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); color: var(--muted); font-size: 9.5px; font-weight: 600; font-style: normal; cursor: help; margin-left: 6px; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
+.unit { color: var(--muted); font-weight: 400; font-size: 11.5px; margin-left: 6px; }
+.card > h3:not(:has(+ .sub)), .card-head h3:not(:has(+ .sub)) { margin-bottom: var(--sp-3); }
+.topbar .subtitle:empty { display: none; }
 
 /* ---------- Playground ---------- */
 .pg-controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: var(--sp-3); }
@@ -424,7 +440,7 @@ tr.chosen > td { background: var(--accent-bg) !important; }
       <a href="#playground" data-r="playground" title="Playground"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5l7 4.5-7 4.5z"/></svg><span>Playground</span></a>
       <a href="#settings" data-r="settings" title="Keys &amp; providers"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.5" cy="10.5" r="3"/><path d="M7.6 8.4L13.5 2.5M11.5 4.5l1.5 1.5M10 6l1.2 1.2"/></svg><span>Keys &amp; providers</span></a>
     </nav>
-    <div class="side-foot" id="side-foot"><span>Self-hosted LLM gateway</span><span id="side-ver">OpenAI-compatible API</span></div>
+    <div class="side-foot" id="side-foot"><span id="side-ver">OpenAI-compatible</span></div>
   </aside>
   <div class="scrim" id="scrim"></div>
 
@@ -456,22 +472,22 @@ tr.chosen > td { background: var(--accent-bg) !important; }
         <div class="grid kpis four" id="ov-kpis" aria-label="Key metrics"></div>
         <div class="grid cols-2 mt">
           <div class="card">
-            <h3>Requests over time</h3><p class="sub" id="ov-ts-sub">From recent request log</p>
+            <h3>Requests</h3><p class="sub" id="ov-ts-sub"></p>
             <div class="legend" id="ov-ts-legend"></div>
             <div id="ov-ts"></div>
           </div>
           <div class="card">
-            <h3>Provider share</h3><p class="sub">Requests served by final provider · errors excluded</p>
+            <h3 title="Final provider per request · errors excluded">Provider share</h3>
             <div id="ov-donut"></div>
           </div>
         </div>
         <div class="grid cols-2 mt">
           <div class="card">
-            <div class="card-head"><div><h3>Provider health</h3><p class="sub" id="ov-health-sub">Live state per upstream</p></div><a class="btn sm" href="#providers">Details</a></div>
+            <div class="card-head"><div><h3>Provider health</h3><p class="sub" id="ov-health-sub"></p></div><a class="btn sm" href="#providers">Details</a></div>
             <div id="ov-health"></div>
           </div>
           <div class="card">
-            <div class="card-head"><div><h3>Recent failovers</h3><p class="sub">Requests that needed more than one attempt</p></div><a class="btn sm" href="#logs">All logs</a></div>
+            <div class="card-head"><div><h3 title="Requests that needed more than one attempt">Recent failovers</h3></div><a class="btn sm" href="#logs">All logs</a></div>
             <div id="ov-failovers"></div>
           </div>
         </div>
@@ -483,32 +499,32 @@ tr.chosen > td { background: var(--accent-bg) !important; }
         <div id="an-body">
           <div class="grid kpis seven" id="an-kpis"></div>
           <div class="grid cols-2e mt">
-            <div class="card"><h3>Requests by provider</h3><p class="sub" id="an-req-sub">Stacked, per bucket</p><div id="an-req"></div></div>
-            <div class="card"><h3>Latency</h3><p class="sub">Percentiles per bucket</p><div id="an-lat"></div></div>
+            <div class="card"><h3>Requests by provider</h3><p class="sub" id="an-req-sub"></p><div id="an-req"></div></div>
+            <div class="card"><h3>Latency</h3><div id="an-lat"></div></div>
           </div>
           <div class="grid cols-2e mt">
-            <div class="card"><h3>Cost vs saved</h3><p class="sub">List-price estimates, USD per bucket</p><div id="an-cost"></div></div>
-            <div class="card"><h3>Errors by type</h3><p class="sub">Failed attempts, classified by cause</p><div id="an-errors"></div></div>
+            <div class="card"><h3>Cost vs saved<span class="unit">USD</span><span class="est" title="List-price estimate (tokens × published price), not invoices">est.</span></h3><div id="an-cost"></div></div>
+            <div class="card"><h3 title="Failed attempts by cause">Errors by type</h3><div id="an-errors"></div></div>
           </div>
-          <div class="section-title"><h2>Providers</h2><p>Click a column to sort · costs are list-price estimates</p></div>
+          <div class="section-title"><h2>Providers<span class="est" title="Costs are list-price estimates (tokens × published price)">est.</span></h2></div>
           <div class="card flush"><div id="an-providers"></div></div>
           <div class="section-title"><h2>Models</h2></div>
           <div class="card flush"><div id="an-models"></div></div>
-          <div class="section-title"><h2>Routing</h2><p>How traffic was classified and which policy chose providers</p></div>
+          <div class="section-title"><h2>Routing</h2></div>
           <div class="grid cols-3">
-            <div class="card"><h3>Tiers</h3><p class="sub">Requests, average latency and cost</p><div id="an-tiers"></div></div>
-            <div class="card"><h3>Tasks</h3><p class="sub">Prompt classification</p><div id="an-tasks"></div></div>
-            <div class="card"><h3>Routing policy</h3><p class="sub">Requests per policy</p><div id="an-policies"></div></div>
+            <div class="card"><h3>Tiers</h3><div id="an-tiers"></div></div>
+            <div class="card"><h3 title="Prompt classification">Tasks</h3><div id="an-tasks"></div></div>
+            <div class="card"><h3>Policies</h3><div id="an-policies"></div></div>
           </div>
-          <div class="section-title"><h2>Failover</h2><p>Attempt chains, recovery and the providers that fail most</p></div>
+          <div class="section-title"><h2>Failover</h2></div>
           <div class="grid cols-2">
-            <div class="card"><h3>Provider-to-provider fallbacks</h3><p class="sub">Band width = times traffic moved from one provider to the next</p><div id="an-flow"></div></div>
-            <div class="card"><h3>Failover summary</h3><p class="sub" id="an-fo-sub">Requests with at least one failed attempt</p><div id="an-failover"></div></div>
+            <div class="card"><h3 title="Band width = times traffic moved from one provider to the next">Fallback flow</h3><div id="an-flow"></div></div>
+            <div class="card"><h3 title="Requests with at least one failed attempt">Summary</h3><div id="an-failover"></div></div>
           </div>
           <div class="section-title"><h2>Semantic cache</h2></div>
           <div class="grid cols-2e">
-            <div class="card"><h3>Cache funnel</h3><p class="sub">Lookups through verified hits</p><div id="an-funnel"></div></div>
-            <div class="card"><h3>Savings</h3><p class="sub">Gross saved by cache hits vs net after cache overhead</p><div id="an-savings"></div></div>
+            <div class="card"><h3>Funnel</h3><div id="an-funnel"></div></div>
+            <div class="card"><h3 title="Gross saved by cache hits vs net after verification and embedding cost">Savings<span class="est" title="List-price estimate, not invoices">est.</span></h3><div id="an-savings"></div></div>
           </div>
         </div>
       </section>
@@ -521,11 +537,9 @@ tr.chosen > td { background: var(--accent-bg) !important; }
       <!-- ================= ROUTING ================= -->
       <section class="page" data-page="routing" hidden>
         <div class="grid kpis five" id="rt-kpis"></div>
-        <div class="grid cols-2 mt">
-          <div class="card"><h3>How CortexGate routes a request</h3><p class="sub">Capacity-aware hybrid algorithm · live configuration in bold</p><div id="rt-explain"></div></div>
-          <div class="card"><h3>Live distribution</h3><p class="sub">Policy <b id="rt-policy">—</b> · classification of requests since start</p><div id="rt-dist"></div></div>
-        </div>
-        <div class="section-title"><h2>Recent decisions</h2><p>Why each request was routed where it was · click a row for the full decision</p></div>
+        <div class="card mt"><h3>Pipeline</h3><div id="rt-explain"></div></div>
+        <div class="card mt"><h3>Distribution<span class="unit">since start · policy <b id="rt-policy">—</b></span></h3><div id="rt-dist"></div></div>
+        <div class="section-title"><h2>Recent decisions<i class="ii" title="Click a row for the full decision">i</i></h2></div>
         <div class="card flush"><div id="rt-decisions"></div></div>
       </section>
 
@@ -541,7 +555,7 @@ tr.chosen > td { background: var(--accent-bg) !important; }
             </div>
             <select id="log-provider" aria-label="Filter by provider"><option value="">All providers</option></select>
             <input type="search" id="log-search" placeholder="Search prompts…" aria-label="Search prompts">
-            <span class="muted small" id="log-count" style="margin-left:auto"></span>
+            <span class="muted small num" id="log-count" style="margin-left:auto"></span>
           </div>
           <div class="table-wrap tall" id="log"></div>
         </div>
@@ -550,18 +564,18 @@ tr.chosen > td { background: var(--accent-bg) !important; }
       <!-- ================= PLAYGROUND ================= -->
       <section class="page" data-page="playground" hidden>
         <div class="card" id="playground">
-          <textarea id="pg-prompt" aria-label="Prompt" placeholder="Ask something, e.g. What is the capital of France?"></textarea>
+          <textarea id="pg-prompt" aria-label="Prompt" placeholder="Prompt"></textarea>
           <div class="pg-controls">
             <label>Policy
-              <select id="pg-policy"><option value="">Default (server)</option><option value="cost">Cost</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select>
+              <select id="pg-policy"><option value="">Default</option><option value="cost">Cost</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select>
             </label>
-            <label>Provider <select id="pg-provider"><option value="">Auto (smart routing)</option></select></label>
-            <label title="Whether the gateway may route to a lower tier when every capable provider is busy">Quality downgrade
-              <select id="pg-downgrade"><option value="">Follow policy</option><option value="true">Allow</option><option value="false">Never</option></select>
+            <label>Provider <select id="pg-provider"><option value="">Auto</option></select></label>
+            <label title="Allow a lower tier when every capable provider is busy (x-allow-downgrade)">Downgrade
+              <select id="pg-downgrade"><option value="">Policy</option><option value="true">Allow</option><option value="false">Never</option></select>
             </label>
             <label class="check"><input type="checkbox" id="pg-bypass"> Bypass cache</label>
             <span style="margin-left:auto" class="muted small"><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span></span>
-            <button class="btn primary" id="pg-send" type="button">Send request</button>
+            <button class="btn primary" id="pg-send" type="button">Send</button>
           </div>
           <div class="pg-out" id="pg-out"></div>
         </div>
@@ -570,19 +584,18 @@ tr.chosen > td { background: var(--accent-bg) !important; }
       <!-- ================= SETTINGS ================= -->
       <section class="page" data-page="settings" hidden>
         <div class="card">
-          <h3>Admin access</h3>
-          <p class="sub">The admin API accepts requests from localhost, or from anywhere with the gateway's <code>ADMIN_TOKEN</code>. The token is kept in this browser tab only (sessionStorage).</p>
+          <h3>Admin token<i class="ii" title="Admin API accepts localhost, or any origin with the gateway's ADMIN_TOKEN. Stored in this tab only (sessionStorage).">i</i></h3>
           <div class="token-row">
-            <input type="password" id="admin-token" placeholder="Admin token (optional on localhost)" aria-label="Admin token" autocomplete="off">
-            <button class="btn" id="admin-token-save" type="button">Save token</button>
+            <input type="password" id="admin-token" placeholder="ADMIN_TOKEN (optional on localhost)" aria-label="Admin token" autocomplete="off">
+            <button class="btn" id="admin-token-save" type="button">Save</button>
             <button class="btn ghost" id="admin-token-clear" type="button">Clear</button>
             <span class="muted small" id="admin-token-state"></span>
           </div>
         </div>
-        <div class="section-title"><h2>Built-in providers</h2><p>Keys saved here are encrypted at rest and override the .env value</p></div>
+        <div class="section-title"><h2>Built-in providers<i class="ii" title="Keys saved here are encrypted at rest and override .env. Keys are never shown in full; removing a dashboard key falls back to .env.">i</i></h2></div>
         <div class="card flush"><div id="set-builtin"></div></div>
-        <div class="section-title"><h2>Custom providers</h2><p>Any OpenAI-compatible endpoint, routed alongside built-ins</p>
-          <button class="btn primary sm" id="btn-add-custom" type="button" style="margin-left:auto">Add custom provider</button></div>
+        <div class="section-title"><h2>Custom providers<i class="ii" title="Any OpenAI-compatible endpoint, routed alongside built-ins">i</i></h2>
+          <button class="btn primary sm" id="btn-add-custom" type="button" style="margin-left:auto">Add provider</button></div>
         <div class="card flush"><div id="set-custom"></div></div>
       </section>
     </main>
@@ -680,6 +693,8 @@ const ICONS = {
   alert: 'M12 3l10 18H2zM12 10v5M12 18h.01'
 };
 function icon(name) { return s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: ICONS[name] || ICONS.inbox })); }
+const EST_TITLE = 'List-price estimate (tokens × published price), not invoices';
+const est = () => h('span', { class: 'est', title: EST_TITLE }, 'est.');
 const empty = (title, text, ic) => h('div', { class: 'empty' }, icon(ic || 'inbox'), title ? h('b', null, title) : null, text ? h('span', null, text) : null);
 const loading = (_text, kind) => h('div', { class: 'skel', 'aria-busy': 'true', 'aria-label': 'Loading' },
   kind === 'chart' ? h('i', { class: 'blk' }) : null, h('i', { class: 'w80' }), h('i', { class: 'w60' }), h('i', { class: 'w40' }));
@@ -911,7 +926,7 @@ function tsChart(opts) {
 function tsSvg(opts) {
   const { times, series, stacked = false, yFmt = fmtInt, height = 220, range = '1h', ariaLabel = 'Time series chart' } = opts;
   const n = times.length;
-  if (!n || !series.length) return empty(null, 'No data in this range.', 'chart');
+  if (!n || !series.length) return empty(null, 'No data', 'chart');
   const W = opts.width || 560, H = height, L = 56, R = 10, T = 10, B = 26, pw = W - L - R, ph = H - T - B;
   const x = i => (opts.bars ? L + (i + 0.5) * (pw / n) : n === 1 ? L + pw / 2 : L + i * (pw / (n - 1)));
   let stacks = null, max = 0;
@@ -1009,7 +1024,7 @@ function tsSvg(opts) {
 /** Donut with 2px gaps; segs [{label, value, color}] */
 function donut(segs, centerLabel) {
   const total = segs.reduce((a, x) => a + x.value, 0);
-  if (!total) return empty(null, 'No traffic yet.');
+  if (!total) return empty(null, 'No traffic', 'chart');
   const R = 60, C = 2 * Math.PI * R, gap = segs.length > 1 ? 2 : 0;
   const svg = s('svg', { viewBox: '0 0 150 150', role: 'img', 'aria-label': 'Provider share: ' + segs.map(x => `${x.label} ${fmtPct(x.value / total, 0)}`).join(', ') });
   append(svg, s('circle', { cx: 75, cy: 75, r: R, fill: 'none', stroke: 'var(--neutral-bg)', 'stroke-width': 18 }));
@@ -1061,7 +1076,7 @@ function hbars(counts, keys, opts = {}) {
 /** Sankey-style flow of provider -> provider fallbacks. */
 function flowChart(transitions) {
   const tr = transitions.filter(t => t && t.from && t.to && num(t.count) > 0).sort((a, b) => num(b.count) - num(a.count)).slice(0, 12);
-  if (!tr.length) return empty('No fallbacks in this range', 'Every request succeeded on its first attempt.');
+  if (!tr.length) return empty(null, 'No fallbacks', 'check');
   const sum = (arr, key) => { const m = new Map(); for (const t of arr) m.set(t[key], (m.get(t[key]) || 0) + num(t.count)); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
   const froms = sum(tr, 'from'), tos = sum(tr, 'to');
   const total = tr.reduce((a, t) => a + num(t.count), 0);
@@ -1086,7 +1101,7 @@ function flowChart(transitions) {
     s('text', { class: 'ink', x: L - 6, y: nd.y + nd.h / 2 + 4, 'text-anchor': 'end' }, `${truncate(n, 14)} ${nd.c}`)]);
   for (const [n, nd] of tN) append(svg, [s('rect', { x: W - R - nodeW, y: nd.y, width: nodeW, height: Math.max(2, nd.h), rx: 2, fill: colorFor(n) }),
     s('text', { class: 'ink', x: W - R + 6, y: nd.y + nd.h / 2 + 4 }, `${truncate(n, 14)} ${nd.c}`)]);
-  return h('div', null, h('div', { class: 'legend' }, h('span', null, 'Failed on (left)'), h('span', null, '→'), h('span', null, 'Fell back to (right)')), svg);
+  return h('div', null, h('div', { class: 'legend' }, h('span', null, 'Failed'), h('span', null, '→'), h('span', null, 'Fallback')), svg);
 }
 
 /** Sortable table. cols: [{key,label,right,get(row)->sortable,fmt(row)->node|string}] */
@@ -1187,13 +1202,13 @@ function renderOverviewKpis(M) {
   const reqDelta = fb ? fb.requests : H.map((p, i) => (i ? Math.max(0, num(p.requests) - num(H[i - 1].requests)) : null)).slice(1);
   mount('ov-kpis',
     kpiCard('Requests', fmtInt(k.requests), isNum(k.errors) ? `${fmtInt(k.errors)} errors` : '', sparkline(reqDelta)),
-    kpiCard('Success rate', fmtPct(k.successRate), k.requests ? `${fmtInt(k.requests - k.errors)} / ${fmtInt(k.requests)} served` : 'No traffic yet', sparkline(col('successRate'), 'var(--good)')),
-    kpiCard('p95 latency', fmtMs(k.p95Latency), isNum(k.avgLatency) ? `avg ${fmtMs(k.avgLatency)} · recent window` : 'recent window', sparkline(col('p95'))),
+    kpiCard('Success rate', fmtPct(k.successRate), k.requests ? `${fmtInt(k.requests - k.errors)} / ${fmtInt(k.requests)}` : '', sparkline(col('successRate'), 'var(--good)')),
+    kpiCard('p95 latency', fmtMs(k.p95Latency), isNum(k.avgLatency) ? `avg ${fmtMs(k.avgLatency)}` : '', sparkline(col('p95'))),
     kpiCard('Cache hit rate', fmtPct(k.hitRate), isNum(c.hits) ? `${fmtInt(c.hits)} hits · ${fmtInt(c.entries)} entries` : '', sparkline(col('hitRate'), 'var(--c3)')),
-    kpiCard('Failover rate', fmtPct(k.failoverRate), `${fmtInt(k.failovers)} requests needed a fallback`, sparkline(col('failoverRate'), 'var(--serious)')),
-    kpiCard('Est. spend', fmtUsd(k.spent), 'list-price estimate', sparkline(col('spent')), 'Provider list prices × tokens, including cache verification calls'),
-    kpiCard('Est. net savings', fmtUsd(k.netSaved), isNum(c.costSaved) ? `gross ${fmtUsd(c.costSaved)} · list-price` : 'list-price estimate', sparkline(col('netSaved'), 'var(--c3)'), 'Cost avoided by cache hits minus verification and embedding cost'),
-    kpiCard('Queued', k.queued === null ? DASH : fmtInt(k.queued), k.queued === null ? 'not reported' : 'rate-limited, waiting', sparkline(col('queued'), 'var(--warn)'))
+    kpiCard('Failover rate', fmtPct(k.failoverRate), `${fmtInt(k.failovers)} requests`, sparkline(col('failoverRate'), 'var(--serious)')),
+    kpiCard(['Spend', est()], fmtUsd(k.spent), '', sparkline(col('spent')), 'Provider list prices × tokens, incl. cache verification'),
+    kpiCard(['Net savings', est()], fmtUsd(k.netSaved), isNum(c.costSaved) ? `gross ${fmtUsd(c.costSaved)}` : '', sparkline(col('netSaved'), 'var(--c3)'), 'Cost avoided by cache hits minus verification and embedding cost'),
+    kpiCard('Queued', k.queued === null ? DASH : fmtInt(k.queued), k.queued === null ? '' : 'rate-limited', sparkline(col('queued'), 'var(--warn)'))
   );
 }
 const TS_SERIES = [
@@ -1204,7 +1219,7 @@ const TS_SERIES = [
 function renderOverviewTs(M) {
   mount('ov-ts-legend', TS_SERIES.map(sr => h('span', null, h('i', { style: `background:${sr.color}` }), sr.label)));
   const times = M.recent.map(r => new Date(r.time).getTime()).filter(Number.isFinite);
-  if (!times.length) { mount('ov-ts', empty('No requests yet', 'Send one from the Playground.')); $('ov-ts-sub').textContent = 'From recent request log'; return; }
+  if (!times.length) { mount('ov-ts', empty(null, 'No requests yet', 'chart')); $('ov-ts-sub').textContent = ''; return; }
   const now = Date.now();
   const spans = [15, 30, 60, 180, 360, 720, 1440].map(m => m * 60000);
   const oldest = Math.min(...times);
@@ -1220,7 +1235,9 @@ function renderOverviewTs(M) {
     shown++;
   }
   const label = span >= 3600000 ? (span / 3600000) + 'h' : (span / 60000) + 'm';
-  $('ov-ts-sub').textContent = `Last ${label} · ${shown} of ${M.recent.length} logged requests · stacked per ${Math.round(bucket / 1000)}s`;
+  const bs = Math.round(bucket / 1000);
+  $('ov-ts-sub').textContent = `last ${label} · ${bs >= 60 ? Math.round(bs / 60) + 'm' : bs + 's'} buckets`;
+  $('ov-ts-sub').title = `${shown} of ${M.recent.length} logged requests`;
   const W = 640, H = 220, L = 34, R = 8, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
   const maxV = Math.max(1, ...buckets.map(b => b.provider + b.cache + b.error));
   const step = Math.max(1, niceStep(maxV, 4)), top = Math.ceil(maxV / step) * step;
@@ -1260,10 +1277,11 @@ function renderOverviewDonut(M) {
 }
 const STATE_BADGE = {
   healthy: ['good', 'Healthy'], probing: ['warn', 'Probing'], open: ['crit', 'Circuit open'],
-  cooldown: ['serious', 'Cooldown'], disabled: ['', 'Disabled'], unconfigured: ['outline', 'No API key']
+  cooldown: ['serious', 'Cooldown'], disabled: ['', 'Disabled'], unconfigured: ['outline', 'No key']
 };
 const STATE_DOT = { healthy: 'good', probing: 'warn', open: 'crit', cooldown: 'serious', disabled: '', unconfigured: '' };
-const REASON_TEXT = { auth: 'auth failed (401/403)', billing: 'billing / no credits (402)', bad_response: 'bad response (non-JSON)' };
+const REASON_TEXT = { auth: 'Auth failed', billing: 'Billing', bad_response: 'Bad response' };
+const REASON_TITLE = { auth: 'HTTP 401/403 · disabled until key changes', billing: 'HTTP 402 / no credits · disabled until key changes', bad_response: 'Non-JSON response · disabled until key changes' };
 function providerStateKey(p) {
   if (p.state && STATE_BADGE[p.state]) return p.state;
   if (p.configured === false) return 'unconfigured';
@@ -1278,20 +1296,20 @@ function sortedProviders(M) {
 }
 function renderOverviewHealth(M) {
   const list = sortedProviders(M);
-  if (!list.length) { mount('ov-health', empty(null, 'No provider data reported yet.')); return; }
+  if (!list.length) { mount('ov-health', empty(null, 'No providers', 'plug')); return; }
   const healthy = list.filter(([, p]) => providerStateKey(p) === 'healthy').length;
-  $('ov-health-sub').textContent = `${healthy} of ${list.length} healthy`;
+  $('ov-health-sub').textContent = `${healthy}/${list.length} healthy`;
   mount('ov-health', h('div', { class: 'strip' }, list.map(([n, p]) => {
     const sk = providerStateKey(p);
     return h('a', { class: 'tile', href: '#providers', title: `${n}: ${STATE_BADGE[sk][1]}${p.disabledReason ? ' · ' + (REASON_TEXT[p.disabledReason] || p.disabledReason) : ''}` },
       h('span', { class: 'tn' }, h('i', { class: 'dot ' + STATE_DOT[sk] }), n),
-      h('span', { class: 'tv' }, sk === 'unconfigured' ? 'no API key' : sk === 'disabled' ? (p.disabledReason || 'disabled')
-        : !num(p.requests) ? 'no traffic yet' : `${fmtPct(p.successRate, 0)} ok · p95 ${fmtMs(p.p95LatencyMs)}`));
+      h('span', { class: 'tv' }, sk === 'unconfigured' ? 'No key' : sk === 'disabled' ? (REASON_TEXT[p.disabledReason] || p.disabledReason || 'Disabled')
+        : !num(p.requests) ? 'Idle' : `${fmtPct(p.successRate, 0)} ok · p95 ${fmtMs(p.p95LatencyMs)}`));
   })));
 }
 function renderOverviewFailovers(M) {
   const rows = M.recent.filter(isFailoverRow).slice(0, 7);
-  if (!rows.length) { mount('ov-failovers', empty('No failovers', M.recent.length ? 'Recent requests all succeeded on the first attempt.' : 'No requests yet.')); return; }
+  if (!rows.length) { mount('ov-failovers', empty(null, 'No failovers', 'check')); return; }
   mount('ov-failovers', h('div', { class: 'feed' }, rows.map(r => h('div', null,
     h('div', { class: 'meta' }, h('span', { title: r.prompt || '' }, r.prompt || DASH), h('span', { class: 'num' }, fmtAgo(r.time)),
       isErrorRow(r) ? h('span', { class: 'badge crit' }, 'unrecovered') : h('span', { class: 'badge good' }, 'recovered')),
@@ -1312,7 +1330,7 @@ function countdownText(until) {
 function stat(k, v, title) { return h('div', { class: 'stat', title: title || null }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v)); }
 function testResultEl(t) {
   if (!t) return null;
-  if (t.pending) return h('span', { class: 'muted small spin' }, 'Testing… (local models may take ~15s)');
+  if (t.pending) return h('span', { class: 'muted small spin', title: 'Local models may take ~15s' }, 'Testing…');
   if (t.ok) return h('span', { class: 'badge good', title: [t.model, t.sample].filter(Boolean).join(' · ') }, `OK · ${fmtMs(t.latencyMs)}${t.model ? ' · ' + truncate(t.model, 24) : ''}`);
   return h('span', { class: 'badge crit', title: t.error || '' }, truncate(t.error || 'Failed', 60));
 }
@@ -1323,7 +1341,7 @@ async function runTest(name, rerender) {
   state.tests[name] = r.ok ? { ok: r.data && r.data.ok !== false, latencyMs: r.data && r.data.latencyMs, model: r.data && r.data.model, sample: r.data && r.data.sample, error: r.data && r.data.error, at: Date.now() }
     : { ok: false, error: r.message, at: Date.now() };
   const t = state.tests[name];
-  banner(t.ok ? `${name}: test passed in ${fmtMs(t.latencyMs)}${t.model ? ' · ' + t.model : ''}` : `${name}: test failed · ${truncate(t.error || 'unknown error', 140)}`, t.ok ? 'good' : 'crit');
+  banner(t.ok ? `${name} OK · ${fmtMs(t.latencyMs)}${t.model ? ' · ' + t.model : ''}` : `${name} failed · ${truncate(t.error || 'unknown error', 140)}`, t.ok ? 'good' : 'crit');
   rerender();
 }
 /** RPM / TPM usage vs limit, plus queue depth (capacity-aware routing fields; hidden when not reported). */
@@ -1352,11 +1370,11 @@ function providerCard(name, p) {
     ? h('dl', { class: 'models' }, TIERS.filter(t => p.models[t]).map(t => [h('dt', null, t), h('dd', { title: String(p.models[t]) }, String(p.models[t]))])) : null;
   const inflight = isNum(p.inflight) ? `${p.inflight}${isNum(p.maxInflight) ? ' / ' + p.maxInflight : ''}` : DASH;
   const hc = p.health && typeof p.health === 'object' ? p.health : null;
-  const health = hc ? h('div', { class: 'hline' }, h('span', { class: 'muted' }, 'Health check'),
+  const health = hc ? h('div', { class: 'hline' }, h('span', { class: 'muted', title: 'Active health check' }, 'Health'),
     hc.lastCheckAt ? [h('span', { class: 'badge ' + (hc.ok === true ? 'good' : hc.ok === false ? 'crit' : '') }, hc.ok === true ? 'pass' : hc.ok === false ? 'fail' : 'unknown'),
       isNum(hc.latencyMs) ? h('span', { class: 'num' }, fmtMs(hc.latencyMs)) : null,
       h('span', { class: 'muted num', title: new Date(hc.lastCheckAt).toLocaleString() }, fmtAgo(hc.lastCheckAt))]
-      : h('span', { class: 'muted' }, 'not run yet'),
+      : h('span', { class: 'muted' }, 'pending'),
     hc.error && hc.ok === false ? h('span', { class: 'muted', title: String(hc.error) }, truncate(hc.error, 50)) : null) : null;
   const rerender = () => { if (state.model && state.route === 'providers') renderProviders(state.model); };
   return h('article', { class: 'card pcard' + (sk === 'unconfigured' || sk === 'disabled' ? ' dim' : '') },
@@ -1365,7 +1383,7 @@ function providerCard(name, p) {
         h('div', { class: 'muted small' }, [p.custom ? 'custom' : null, isNum(p.rrWeight) ? 'weight ' + p.rrWeight : null].filter(Boolean).join(' · ') || ' ')),
       h('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end' },
         h('span', { class: 'badge dotted ' + cls }, label),
-        p.disabledReason ? h('span', { class: 'badge crit', title: REASON_TEXT[p.disabledReason] || '' }, p.disabledReason) : null,
+        p.disabledReason ? h('span', { class: 'badge crit', title: REASON_TITLE[p.disabledReason] || '' }, REASON_TEXT[p.disabledReason] || p.disabledReason) : null,
         cd ? h('span', { class: 'badge serious num', 'data-until': p.cooldownUntil, title: 'Cooldown remaining' }, cd) : null)),
     models,
     h('div', null,
@@ -1385,11 +1403,10 @@ function providerCard(name, p) {
       testResultEl(state.tests[name])));
 }
 function renderProviders(M) {
-  $('page-sub').textContent = M.providerSource === 'derived'
-    ? 'Health from circuit breakers; counts and latency derived from the recent request log'
-    : `${SUBTITLES.providers}${isNum(M.config.providerTimeoutMs) ? ` · ${fmtMs(M.config.providerTimeoutMs)} per-attempt timeout` : ''}`;
+  $('page-sub').textContent = M.providerSource === 'derived' ? 'Derived from request log'
+    : isNum(M.config.providerTimeoutMs) ? `${fmtMs(M.config.providerTimeoutMs)} timeout / attempt` : '';
   const list = sortedProviders(M);
-  if (!list.length) { mount('providers', h('div', { class: 'card' }, empty(null, 'No provider data reported yet.'))); return; }
+  if (!list.length) { mount('providers', h('div', { class: 'card' }, empty(null, 'No providers', 'plug'))); return; }
   mount('providers', list.map(([n, p]) => providerCard(n, p)));
 }
 function tickCountdowns() {
@@ -1432,7 +1449,7 @@ function routingDecisionCard(route) {
           h('td', { class: 'right num' }, fmtUsd(c.estCost)),
           h('td', { class: 'right num' }, isNum(c.score) ? c.score.toFixed(3) : DASH));
       })))) : null,
-    excluded.length ? h('div', null, h('div', { class: 'muted small', style: 'margin-bottom:6px' }, 'Excluded providers'),
+    excluded.length ? h('div', null, h('div', { class: 'muted small', style: 'margin-bottom:6px' }, 'Excluded'),
       h('div', { class: 'chain' }, excluded.map(([p, why]) => h('span', { class: 'chip skip', title: String(why) }, `${p}: ${truncate(why, 40)}`)))) : null);
 }
 
@@ -1443,32 +1460,40 @@ function renderRouting(M) {
   const dgRecent = M.recent.filter(r => r.route && r.route.downgrade).length;
   const k = (l, v, hint) => h('div', { class: 'card kpi mini' }, h('div', { class: 'label' }, l), h('div', { class: 'value' }, v), h('div', { class: 'hint' }, hint));
   mount('rt-kpis',
-    k('Routing policy', cap(R.policy || DASH), 'server default'),
-    k('Quality downgrades', isNum(raw.downgrades) ? fmtInt(raw.downgrades) : fmtInt(dgRecent), isNum(raw.downgrades) ? 'since start' : 'in recent log'),
-    k('Capacity rejections', fmtInt(raw.capacityRejections), isNum(raw.capacityRejections) ? '503 CAPACITY_EXHAUSTED' : 'not reported'),
-    k('Avg queue wait', fmtMs(isNum(raw.avgQueuedMs) ? raw.avgQueuedMs : mean(recentQ)), isNum(raw.avgQueuedMs) ? 'while saturated' : recentQ.length ? 'recent log' : 'not reported'),
-    k('Per-attempt timeout', fmtMs(C.providerTimeoutMs), 'fixed, per provider attempt'));
-  const B = v => h('strong', null, v);
+    k('Policy', cap(R.policy || DASH), 'default'),
+    k('Downgrades', isNum(raw.downgrades) ? fmtInt(raw.downgrades) : fmtInt(dgRecent), isNum(raw.downgrades) ? 'since start' : 'recent log'),
+    k('Capacity rejections', fmtInt(raw.capacityRejections), isNum(raw.capacityRejections) ? 'HTTP 503' : ''),
+    k('Avg queue wait', fmtMs(isNum(raw.avgQueuedMs) ? raw.avgQueuedMs : mean(recentQ)), isNum(raw.avgQueuedMs) ? 'when saturated' : recentQ.length ? 'recent log' : ''),
+    k('Attempt timeout', fmtMs(C.providerTimeoutMs), 'per provider'));
   const maxAttempts = C.maxAttempts ?? C.maxFailoverAttempts ?? C.failoverMaxAttempts;
   const order = Array.isArray(C.providerOrder) ? C.providerOrder : [];
-  const step = (t, ...p) => h('li', null, h('div', null, h('b', null, t), h('p', null, ...p)));
-  mount('rt-explain', h('ol', { class: 'steps' },
-    step('Estimate the request', 'Input and output tokens are estimated and the prompt is classified by task, which sets the quality the answer needs and a tier (light, standard, heavy).'),
-    step('Find eligible models', 'Only models that clear the quality floor and fit the context window are kept.'),
-    step('Drop providers at their limits', 'Providers with an open breaker, in 429 cooldown, at max concurrency, or over their RPM / TPM budget are excluded, with the reason recorded.'),
-    step('Pick the least-loaded, fastest match', 'Remaining candidates are scored by the ', B(R.policy || 'balanced'), ' policy (quality, list price, latency, current load); near-equal providers rotate round-robin.'),
-    step('Queue briefly if everyone is busy', 'If every capable provider is saturated the request waits in a short bounded queue (at most ', B('2.5s'), ') for capacity.'),
-    step('Downgrade only if allowed', 'If capacity still is not available, a lower tier is used only when the policy or the request allows it (header ', h('code', null, 'x-allow-downgrade'), '); otherwise the gateway returns a clear 503 with Retry-After.'),
-    step('Bounded failover', 'Each attempt has a fixed timeout of ', B(isNum(C.providerTimeoutMs) ? fmtMs(C.providerTimeoutMs) : DASH), '; a timeout, 429 or 5xx moves to the next candidate, up to ', B(isNum(maxAttempts) ? String(maxAttempts) : '3'), ' attempts. Auth, billing and non-JSON failures disable a provider until its key changes; active health checks bring recovered providers back.')),
-    order.length ? h('p', { class: 'note' }, 'Configured provider order: ' + order.join(' → ')) : null,
-    h('p', { class: 'note' }, 'The semantic cache is checked before any of this; near matches below the trust threshold are verified by a model first.'));
+  const chip = (t, title) => h('span', { class: 'chip', title: title || null }, t);
+  const step = (name, title, ...chips) => h('li', null, h('div', { class: 'st', title }, h('b', null, name), chips.length ? h('span', null, chips) : null));
+  const tmo = isNum(C.providerTimeoutMs) ? fmtMs(C.providerTimeoutMs) : DASH;
+  mount('rt-explain',
+    h('ol', { class: 'pipe', 'aria-label': 'Routing pipeline' },
+      step('Cache', 'Semantic cache lookup; near matches are verified by a model', chip('semantic')),
+      step('Classify', 'Estimate tokens, classify task, set quality floor and tier', chip('tier'), chip('task')),
+      step('Filter', 'Drop models below quality floor or context window, and providers with open breaker, 429 cooldown, max concurrency or RPM/TPM over budget', chip('quality'), chip('capacity')),
+      step('Score', 'Rank by policy (quality, list price, latency, load); near-equal providers rotate round-robin', chip(R.policy || 'balanced', 'Active policy'), chip('RR')),
+      step('Queue', 'Wait in a bounded queue when every capable provider is saturated', chip('≤2.5s')),
+      step('Downgrade?', 'Lower tier only if policy or x-allow-downgrade allows; else 503 + Retry-After', chip('opt-in'), chip('503')),
+      step('Failover', 'Timeout, 429 or 5xx moves to next candidate', chip('×' + (isNum(maxAttempts) ? maxAttempts : 3), 'Max attempts'), chip(tmo, 'Per-attempt timeout'))),
+    order.length ? h('div', { class: 'pipe-meta' }, h('span', null, 'Order'), h('span', { class: 'mono' }, order.join(' → '))) : null,
+    h('details', { class: 'how' }, h('summary', null, 'How it works'), h('ul', null,
+      h('li', null, 'Cache hit returns immediately; near matches are model-verified.'),
+      h('li', null, 'Prompt task sets the quality floor and tier.'),
+      h('li', null, 'Busy, rate-limited or broken providers are excluded.'),
+      h('li', null, 'Policy score picks the least-loaded good match.'),
+      h('li', null, `Each attempt times out after ${tmo}; 429/5xx fail over.`),
+      h('li', null, 'Auth, billing or non-JSON failures disable a provider until its key changes.'))));
   const hasData = Object.values(R.tierCounts).some(v => num(v) > 0) || Object.values(R.taskCounts).some(v => num(v) > 0);
   mount('rt-dist', hasData
-    ? [h('p', { class: 'lbl' }, 'Tier'), hbars(R.tierCounts, TIERS), h('p', { class: 'lbl gap' }, 'Task'), hbars(R.taskCounts, TASKS),
-       R.source === 'derived' ? h('p', { class: 'note' }, 'Derived from the recent request log.') : null]
-    : empty('No routing decisions yet', 'Send a request from the Playground.', 'chart'));
+    ? h('div', { class: 'dist2', title: R.source === 'derived' ? 'Derived from request log' : null },
+        h('div', null, h('p', { class: 'lbl' }, 'Tier'), hbars(R.tierCounts, TIERS)), h('div', null, h('p', { class: 'lbl' }, 'Task'), hbars(R.taskCounts, TASKS)))
+    : empty(null, 'No decisions yet', 'chart'));
   const rows = M.recent.filter(r => r.route || isCacheRow(r)).slice(0, 40);
-  if (!rows.length) { mount('rt-decisions', empty('No routed requests yet', 'Decisions appear here as traffic flows.')); return; }
+  if (!rows.length) { mount('rt-decisions', empty(null, 'No routed requests')); return; }
   const tbody = h('tbody');
   for (const r of rows) {
     const key = rowKey(r), open = state.rtExpanded.has(key);
@@ -1480,7 +1505,7 @@ function renderRouting(M) {
       h('td', { class: 'prompt', title: r.prompt || '' }, r.prompt || DASH),
       h('td', null, isCacheRow(r) ? h('span', { class: 'badge good' }, 'cache') : routeBadges(r)),
       h('td', null, (r.route && r.route.policy) || DASH),
-      h('td', { class: 'wrap', style: 'min-width:240px' }, isCacheRow(r) ? `Semantic cache hit${isNum(r.similarity) ? ' (similarity ' + r.similarity.toFixed(3) + ')' : ''}` : ((r.route && r.route.reason) || DASH),
+      h('td', { class: 'wrap', style: 'min-width:240px' }, h('div', { class: 'clamp2', title: (r.route && r.route.reason) || null }, isCacheRow(r) ? `Cache hit${isNum(r.similarity) ? ' · ' + r.similarity.toFixed(3) : ''}` : ((r.route && r.route.reason) || DASH)),
         r.route && r.route.downgrade ? h('div', null, h('span', { class: 'badge warn' }, `downgraded ${r.route.downgrade.from || ''} → ${r.route.downgrade.to || ''}`)) : null),
       h('td', null, finalProvider(r)),
       h('td', null, chainEl(r))));
@@ -1523,14 +1548,14 @@ function detailRow(r) {
       kv('Cost / verify / embed', `${fmtUsd(num(r.cost))} / ${fmtUsd(num(r.verifyCost))} / ${fmtUsd(num(r.embedCost))}`),
       kv('Saved', isNum(r.savedCost) ? fmtUsd(r.savedCost) : null),
       kv('Skipped providers', (r.skippedProviders || []).join(', '))),
-    attempts ? h('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px' }, derived ? 'Attempts (reconstructed from failed providers; detail not reported)' : 'Attempts') : null,
+    attempts ? h('div', { class: 'muted', style: 'font-size:11px;margin-bottom:4px', title: derived ? 'Reconstructed from failed providers; detail not reported' : null }, derived ? 'Attempts (reconstructed)' : 'Attempts') : null,
     attempts,
     isCacheRow(r) ? null : routingDecisionCard({ ...route, provider: r.provider })));
 }
 function renderLog(M) {
   const rows = M.recent.filter(matchesFilter);
-  $('log-count').textContent = `${rows.length} of ${M.recent.length} requests`;
-  if (!rows.length) { mount('log', empty(null, M.recent.length ? 'No requests match these filters.' : 'No requests yet. Use the Playground to send one.')); return; }
+  $('log-count').textContent = `${rows.length} / ${M.recent.length}`;
+  if (!rows.length) { mount('log', empty(null, M.recent.length ? 'No matches' : 'No requests yet')); return; }
   const tbody = h('tbody');
   for (const r of rows.slice(0, 150)) {
     const key = rowKey(r), open = state.expanded.has(key);
@@ -1598,24 +1623,24 @@ async function loadAnalytics(showSpinner) {
 function renderAnalytics() {
   const A = state.an;
   const body = $('an-body');
-  if (A.status === 'unavailable') { body.hidden = true; mount('an-status', h('div', { class: 'card' }, empty('Analytics not available', 'This gateway version does not expose GET /v1/analytics yet. Live metrics on Overview still work.'))); return; }
+  if (A.status === 'unavailable') { body.hidden = true; mount('an-status', h('div', { class: 'card' }, empty('Analytics unavailable', 'GET /v1/analytics → 404', 'alert'))); return; }
   if (!A.data) {
     body.hidden = true;
     mount('an-status', h('div', { class: 'card' }, A.status === 'error'
-      ? h('div', { class: 'empty' }, h('b', null, 'Could not load analytics'), A.error || '', h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn sm', type: 'button', onclick: () => loadAnalytics(true) }, 'Retry')))
+      ? h('div', { class: 'empty' }, h('b', null, 'Load failed'), A.error || '', h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn sm', type: 'button', onclick: () => loadAnalytics(true) }, 'Retry')))
       : loading('Loading analytics…')));
     return;
   }
   body.hidden = false;
   const D = A.data;
-  mount('an-status', A.error ? h('div', { class: 'warnbox', style: 'margin-bottom:16px' }, 'Refresh failed: ' + A.error + ' · showing the last good data') : null);
+  mount('an-status', A.error ? h('div', { class: 'warnbox', style: 'margin-bottom:16px' }, 'Refresh failed · stale data · ' + A.error) : null);
   const parts = [
     ['kpis', anKpis], ['req', anRequests], ['lat', anLatency], ['cost', anCost], ['errors', anErrors], ['providers', anProviders],
     ['models', anModels], ['tiers', anTiers], ['tasks', anTasks], ['policies', anPolicies], ['flow', anFlow], ['failover', anFailover],
     ['funnel', anFunnel], ['savings', anSavings]
   ];
   for (const [id, fn] of parts) {
-    try { fn(D); } catch (err) { console.warn('[dashboard] analytics ' + id + ' failed:', err); mount('an-' + id, empty(null, 'Could not render this panel.')); }
+    try { fn(D); } catch (err) { console.warn('[dashboard] analytics ' + id + ' failed:', err); mount('an-' + id, empty(null, 'Render failed', 'alert')); }
   }
 }
 const anSeries = D => (Array.isArray(D.series) ? D.series.filter(p => p && p.t) : []);
@@ -1624,13 +1649,13 @@ function anKpis(D) {
   const mini = (l, v, hnt) => h('div', { class: 'card kpi mini' }, h('div', { class: 'label' }, l), h('div', { class: 'value' }, v), h('div', { class: 'hint' }, hnt || ''));
   const span = D.from && D.to ? `${fmtBucket(D.from, D.range === '7d' ? '7d' : 'x')} – ${fmtBucket(D.to, D.range === '7d' ? '7d' : 'x')}` : '';
   mount('an-kpis',
-    h('div', { class: 'card kpi mini', title: span ? 'Window ' + span : null }, h('div', { class: 'label' }, 'Requests'), h('div', { class: 'value' }, fmtInt(T.requests)), h('div', { class: 'hint' }, 'from ' + (D.source === 'mongodb' ? 'MongoDB' : 'local log'))),
+    h('div', { class: 'card kpi mini', title: span ? 'Window ' + span : null }, h('div', { class: 'label' }, 'Requests'), h('div', { class: 'value' }, fmtInt(T.requests)), h('div', { class: 'hint' }, D.source === 'mongodb' ? 'MongoDB' : 'local log')),
     mini('Success rate', fmtPct(T.successRate), `${fmtInt(T.errors)} errors · ${fmtInt(T.queued)} queued`),
     mini('Latency p50 / p95', `${fmtMs(T.p50LatencyMs)} / ${fmtMs(T.p95LatencyMs)}`, `p99 ${fmtMs(T.p99LatencyMs)} · avg ${fmtMs(T.avgLatencyMs)}`),
     mini('Cache hit rate', fmtPct(T.cacheHitRate), `${fmtInt(T.cacheHits)} hits`),
     mini('Failover rate', fmtPct(F.rate), `${fmtInt(T.failovers ?? F.requestsWithFailover)} requests`),
-    mini('Est. spend', fmtUsd(T.cost), `${fmtCompact(T.tokens)} tokens`),
-    mini('Est. net savings', fmtUsd(T.netSaved), `gross ${fmtUsd(T.savedCost)}`));
+    mini(['Spend', est()], fmtUsd(T.cost), `${fmtCompact(T.tokens)} tokens`),
+    mini(['Net savings', est()], fmtUsd(T.netSaved), `gross ${fmtUsd(T.savedCost)}`));
 }
 function anRequests(D) {
   const S = anSeries(D);
@@ -1641,8 +1666,8 @@ function anRequests(D) {
   const shown = keys.filter(hasColor), folded = keys.filter(k => !hasColor(k));
   const series = shown.map(k => ({ label: k === 'none' ? 'failed' : k, color: colorFor(k), values: S.map(p => num((p.byProvider || {})[k])) }));
   if (folded.length) series.push({ label: 'Other', color: 'var(--c-other)', values: S.map(p => folded.reduce((a, k) => a + num((p.byProvider || {})[k]), 0)) });
-  $('an-req-sub').textContent = `Stacked requests per ${fmtMs(num(D.bucketMs))} bucket${folded.length ? ' · ' + folded.length + ' small providers folded into Other' : ''}`;
-  if (!series.length) { mount('an-req', empty('No requests in this range', 'Try a longer range or send traffic.')); return; }
+  $('an-req-sub').textContent = `per ${fmtMs(num(D.bucketMs))}${folded.length ? ' · ' + folded.length + ' in Other' : ''}`;
+  if (!series.length) { mount('an-req', empty(null, 'No requests', 'chart')); return; }
   mount('an-req', tsChart({ id: 'req', times: S.map(p => p.t), series, stacked: true, bars: true, range: D.range, ariaLabel: 'Requests by provider over time' }));
 }
 function anLatency(D) {
@@ -1651,24 +1676,23 @@ function anLatency(D) {
   const val = k => S.map(p => (num(p.requests) > 0 && isNum(p[k]) ? p[k] : null));
   const defs = [['p50LatencyMs', 'p50', 'var(--c1)'], ['avgLatencyMs', 'avg', 'var(--c1)', '4 3'], ['p95LatencyMs', 'p95', 'var(--c2)'], ['p99LatencyMs', 'p99', 'var(--c7)']]
     .filter(([k]) => has(k)).filter(([k], _, arr) => !(k === 'avgLatencyMs' && arr.some(a => a[0] === 'p50LatencyMs')));
-  if (!defs.length) { mount('an-lat', empty(null, 'No latency samples in this range.')); return; }
+  if (!defs.length) { mount('an-lat', empty(null, 'No samples', 'chart')); return; }
   mount('an-lat', tsChart({ id: 'lat', connectGaps: true, times: S.map(p => p.t), series: defs.map(([k, l, c, dash]) => ({ label: l, color: c, dash, values: val(k) })), yFmt: fmtMs, range: D.range, ariaLabel: 'Latency percentiles over time' }));
 }
 function anCost(D) {
   const S = anSeries(D);
-  if (!S.some(p => num(p.cost) > 0 || num(p.savedCost) > 0)) { mount('an-cost', [empty('No cost recorded', 'Free-tier providers bill $0 at list price.'), h('p', { class: 'note' }, 'Costs are list-price estimates (tokens × published price), not invoices.')]); return; }
+  if (!S.some(p => num(p.cost) > 0 || num(p.savedCost) > 0)) { mount('an-cost', empty(null, 'No cost recorded', 'chart')); return; }
   mount('an-cost', tsChart({ id: 'cost', times: S.map(p => p.t), range: D.range, yFmt: fmtUsdAxis, tipFmt: fmtUsd, ariaLabel: 'Cost and saved cost over time',
     series: [{ label: 'Spend (est.)', color: 'var(--c1)', values: S.map(p => num(p.cost)) }, { label: 'Saved by cache (est.)', color: 'var(--c3)', values: S.map(p => num(p.savedCost)) }] }),
     (() => { const T = D.totals || {}, kv = (k, v) => h('div', null, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
       return h('div', { class: 'kvgrid', style: 'margin-top:16px;padding-top:16px;border-top:1px solid var(--border)' },
-        kv('Spend', fmtUsd(T.cost)), kv('Saved (gross)', fmtUsd(T.savedCost)), kv('Cache overhead', fmtUsd(num(T.verifyCost) + num(T.embedCost))), kv('Tokens', fmtCompact(T.tokens))); })(),
-    h('p', { class: 'note' }, 'List-price estimates (tokens × published price), not invoices.'));
+        kv('Spend', fmtUsd(T.cost)), kv('Saved (gross)', fmtUsd(T.savedCost)), kv('Cache overhead', fmtUsd(num(T.verifyCost) + num(T.embedCost))), kv('Tokens', fmtCompact(T.tokens))); })());
 }
 function anErrors(D) {
   const counts = {}, last = {};
   if (Array.isArray(D.errors) && D.errors.length) for (const e of D.errors) { if (!e || !e.type) continue; counts[e.type] = num(e.count); last[e.type] = e.lastMessage; }
   else for (const p of D.providers || []) for (const [k, v] of Object.entries((p && p.errorsByType) || {})) counts[k] = (counts[k] || 0) + num(v);
-  if (!Object.values(counts).some(v => v > 0)) { mount('an-errors', empty('No errors in this range', 'No failed attempts were recorded.')); return; }
+  if (!Object.values(counts).some(v => v > 0)) { mount('an-errors', empty(null, 'No errors', 'check')); return; }
   const keys = ERR_TYPES.filter(k => num(counts[k]) > 0).concat(Object.keys(counts).filter(k => !ERR_TYPES.includes(k) && counts[k] > 0));
   const rows = keys.filter(k => last[k]);
   mount('an-errors', hbars(counts, keys, { label: k => ERR_LABEL[k] || k, color: 'var(--serious)', titleOf: k => last[k] || '' }),
@@ -1682,7 +1706,7 @@ function errChips(e) {
 }
 function anProviders(D) {
   const rows = (D.providers || []).filter(p => p && p.name);
-  if (!rows.length) { mount('an-providers', empty(null, 'No provider traffic in this range.')); return; }
+  if (!rows.length) { mount('an-providers', empty(null, 'No traffic')); return; }
   const sw = r => h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, h('i', { class: 'sw', style: `background:${colorFor(r.name)}` }), r.name);
   mount('an-providers', sortTable('prov', [
     { key: 'name', label: 'Provider', get: r => r.name, fmt: sw },
@@ -1699,7 +1723,7 @@ function anProviders(D) {
 }
 function anModels(D) {
   const rows = (D.models || []).filter(m => m && m.model);
-  if (!rows.length) { mount('an-models', empty(null, 'No model usage in this range.')); return; }
+  if (!rows.length) { mount('an-models', empty(null, 'No model usage')); return; }
   mount('an-models', sortTable('models', [
     { key: 'provider', label: 'Provider', get: r => r.provider || '' },
     { key: 'model', label: 'Model', get: r => r.model, cls: 'mono' },
@@ -1712,7 +1736,7 @@ function anModels(D) {
 function anTiers(D) {
   const T = D.tiers || {};
   const counts = {}; TIERS.forEach(t => { counts[t] = num(T[t] && T[t].requests); });
-  if (!Object.values(counts).some(v => v > 0)) { mount('an-tiers', empty(null, 'No routed requests in this range.')); return; }
+  if (!Object.values(counts).some(v => v > 0)) { mount('an-tiers', empty(null, 'No data', 'chart')); return; }
   mount('an-tiers', hbars(counts, TIERS), h('div', { class: 'table-wrap mt' }, h('table', null,
     h('thead', null, h('tr', null, h('th', null, 'Tier'), h('th', { class: 'right' }, 'Avg latency'), h('th', { class: 'right' }, 'Cost (est.)'))),
     h('tbody', null, TIERS.map(t => h('tr', null, h('td', null, h('span', { class: 'badge ' + TIER_CLS[t] }, t)),
@@ -1720,14 +1744,14 @@ function anTiers(D) {
 }
 function anTasks(D) {
   const T = D.tasks || {};
-  if (!Object.values(T).some(v => num(v) > 0)) { mount('an-tasks', empty(null, 'No classified prompts in this range.')); return; }
+  if (!Object.values(T).some(v => num(v) > 0)) { mount('an-tasks', empty(null, 'No data', 'chart')); return; }
   mount('an-tasks', hbars(T, TASKS.filter(k => k in T || true)));
 }
 function anPolicies(D) {
   const P = D.policies || {};
-  if (!Object.values(P).some(v => num(v) > 0)) { mount('an-policies', empty(null, 'No policy data in this range.')); return; }
+  if (!Object.values(P).some(v => num(v) > 0)) { mount('an-policies', empty(null, 'No data', 'chart')); return; }
   mount('an-policies', hbars(P, POLICIES, { color: 'var(--c7)' }),
-    state.model && state.model.routing.policy ? h('p', { class: 'note' }, 'Server default: ' + state.model.routing.policy + '. Requests can override via x-routing-policy.') : null);
+    state.model && state.model.routing.policy ? h('p', { class: 'note', title: 'Override per request with x-routing-policy' }, 'Default: ' + state.model.routing.policy) : null);
 }
 function anFlow(D) { mount('an-flow', flowChart(((D.failover || {}).transitions) || [])); }
 function anFailover(D) {
@@ -1740,12 +1764,12 @@ function anFailover(D) {
       kv('Avg chain length', isNum(F.avgChainLength) ? F.avgChainLength.toFixed(2) : DASH, 'Attempts per request that failed over'),
       kv('Max chain length', fmtInt(F.maxChainLength)),
       kv('Recovered', fmtInt(F.recovered), 'Failed over and eventually succeeded'), kv('Unrecovered', fmtInt(F.unrecovered), 'Every attempt failed')),
-    h('p', { class: 'lbl gap' }, 'Top failing providers'),
+    h('p', { class: 'lbl gap' }, 'Top failing'),
     top.length ? h('div', { class: 'table-wrap' }, h('table', null,
       h('thead', null, h('tr', null, h('th', null, 'Provider'), h('th', { class: 'right' }, 'Failures'), h('th', null, 'Top reason'))),
       h('tbody', null, top.slice(0, 8).map(x => h('tr', null, h('td', null, x.provider), h('td', { class: 'right num' }, fmtInt(x.count)),
         h('td', null, x.topReason ? h('span', { class: 'badge crit' }, ERR_LABEL[x.topReason] || x.topReason) : DASH))))))
-      : empty(null, 'No failing providers in this range.'));
+      : empty(null, 'No failures', 'check'));
 }
 function funnelEl(steps) {
   const max = Math.max(1, ...steps.map(x => num(x[1])));
@@ -1755,14 +1779,14 @@ function funnelEl(steps) {
 }
 function anFunnel(D) {
   const C = D.cache || {};
-  if (!num(C.lookups) && !num(C.bypassed)) { mount('an-funnel', empty(null, 'No cache lookups in this range.')); return; }
+  if (!num(C.lookups) && !num(C.bypassed)) { mount('an-funnel', empty(null, 'No lookups', 'chart')); return; }
   mount('an-funnel', funnelEl([
     ['Lookups', C.lookups, 'var(--s-provider)', 'Requests that checked the cache'],
     ['Hits', C.hits, 'var(--s-cache)', 'Served from cache'],
     ['Verified hits', C.verifiedHits, 'var(--s-cache)', 'Near matches confirmed by the verifier model'],
     ['Rejected', C.rejected, 'var(--crit)', 'Near matches blocked by the verifier (wrong answer avoided)'],
     ['Bypassed', C.bypassed, 'var(--c-other)', 'Time-sensitive or explicitly bypassed requests']]),
-    h('p', { class: 'note' }, `Hit rate ${fmtPct(C.hitRate)} of lookups.`));
+    h('p', { class: 'note' }, `Hit rate ${fmtPct(C.hitRate)}`));
 }
 function anSavings(D) {
   const T = D.totals || {}, C = D.cache || {};
@@ -1773,9 +1797,8 @@ function anSavings(D) {
     h('div', { class: 'track' }, num(v) > 0 ? h('i', { style: `width:${(num(v) / max) * 100}%;background:${col}` }) : null), h('span', { class: 'num', style: 'text-align:right' }, fmtUsd(v)));
   mount('an-savings', h('div', { class: 'funnel' }, bar('Gross saved', gross, 'var(--c3)'), bar('Net saved', net, 'var(--c1)')),
     h('table', { class: 'costtable' }, h('tbody', null,
-      tr('Gross saved by cache hits', fmtUsd(gross)), tr('− Verification cost', fmtUsd(T.verifyCost)), tr('− Embedding cost', fmtUsd(T.embedCost)),
-      tr('Net saved', fmtUsd(net), 'total'), tr('Spend on completions', fmtUsd(T.cost)))),
-    h('p', { class: 'note' }, 'All costs are list-price estimates (tokens × published per-token price), not invoices. Free tiers may bill $0.'));
+      tr('Gross saved', fmtUsd(gross)), tr('− Verification', fmtUsd(T.verifyCost)), tr('− Embedding', fmtUsd(T.embedCost)),
+      tr('Net saved', fmtUsd(net), 'total'), tr('Completion spend', fmtUsd(T.cost)))));
 }
 
 /* =========================================================
@@ -1795,8 +1818,8 @@ async function adminFetch(method, path, body) {
     try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw.slice(0, 200) }; }
     if (res.ok) return { ok: true, status: res.status, data };
     let message = errMsg(data, res.status);
-    if (res.status === 401 || res.status === 403) message = `Not authorized (HTTP ${res.status}). Open the dashboard via http://localhost:3003/dashboard, or set ADMIN_TOKEN on the gateway and enter it under Keys & providers.`;
-    else if (res.status === 404 && !(data && data.error)) message = 'Admin API not available on this gateway version (HTTP 404).';
+    if (res.status === 401 || res.status === 403) message = `Unauthorized (HTTP ${res.status}) · use localhost or set an admin token`;
+    else if (res.status === 404 && !(data && data.error)) message = 'Admin API unavailable (HTTP 404)';
     return { ok: false, status: res.status, data, message };
   } catch (err) { return { ok: false, status: 0, data: null, message: 'Network error: ' + err.message }; }
 }
@@ -1809,19 +1832,19 @@ async function loadAdmin() {
 }
 function renderTokenState() {
   const has = !!sess(TOKEN_KEY);
-  $('admin-token-state').textContent = has ? 'Token set for this tab' : 'No token · relying on localhost access';
+  $('admin-token-state').textContent = has ? 'Token set' : 'No token · localhost';
 }
 $('admin-token-save').addEventListener('click', () => {
   const v = $('admin-token').value.trim();
   if (!v) { $('admin-token').focus(); return; }
   sess(TOKEN_KEY, v); $('admin-token').value = '';
-  renderTokenState(); banner('Admin token saved for this tab.', 'good'); loadAdmin();
+  renderTokenState(); banner('Token saved', 'good'); loadAdmin();
 });
 $('admin-token-clear').addEventListener('click', () => { sess(TOKEN_KEY, null); $('admin-token').value = ''; renderTokenState(); loadAdmin(); });
 $('admin-token').addEventListener('keydown', e => { if (e.key === 'Enter') $('admin-token-save').click(); });
 
 function adminErrorBox(msg, code) {
-  if (code === 404) return empty('Admin API not available', 'This gateway version does not expose /v1/admin/providers yet.');
+  if (code === 404) return empty('Admin API unavailable', 'GET /v1/admin/providers → 404', 'lock');
   return h('div', { class: 'errbox', role: 'alert' }, msg || 'Request failed');
 }
 const KEY_SRC = { env: ['info', '.env'], dashboard: ['good', 'dashboard'] };
@@ -1832,7 +1855,7 @@ function renderSettings() {
   if (A.status === 'loading' || A.status === 'idle') { mount('set-builtin', loading('Loading providers…')); mount('set-custom', loading()); return; }
   if (A.status === 'error') {
     mount('set-builtin', adminErrorBox(A.error, A.code), A.code !== 404 ? h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn sm', type: 'button', onclick: loadAdmin }, 'Retry')) : null);
-    mount('set-custom', empty(null, A.code === 404 ? 'Custom providers need the admin API.' : 'Unavailable until the admin API responds.'));
+    mount('set-custom', empty(null, 'Admin API required', 'lock'));
     return;
   }
   const D = A.data, rr = () => renderSettings();
@@ -1844,20 +1867,19 @@ function renderSettings() {
       const [srcCls, srcLabel] = KEY_SRC[b.keySource] || ['outline', 'missing'];
       const sk = live ? providerStateKey(live) : null;
       const t = state.tests[b.name] || (b.lastTest && typeof b.lastTest === 'object' ? b.lastTest : null);
-      const acct = b.needsAccountId ? (b.accountIdHint ? `account ${b.accountIdHint}` : 'needs account ID') : null;
+      const acct = b.needsAccountId ? (b.accountIdHint ? `account ${b.accountIdHint}` : 'Account ID needed') : null;
       return h('tr', null,
         h('td', null, h('div', { style: 'font-weight:500' }, b.label || b.name), h('div', { class: 'muted small mono' }, b.name)),
-        h('td', null, b.keyless ? h('span', { class: 'badge info dotted' }, 'no key needed') : b.configured ? h('span', { class: 'badge good dotted' }, 'configured') : h('span', { class: 'badge outline' }, 'missing key')),
+        h('td', null, b.keyless ? h('span', { class: 'badge info dotted' }, 'Keyless') : b.configured ? h('span', { class: 'badge good dotted' }, 'Configured') : h('span', { class: 'badge outline' }, 'No key')),
         h('td', null, b.keyless ? h('span', { class: 'muted' }, DASH) : h('span', { class: 'badge ' + srcCls }, srcLabel), acct ? h('div', { class: 'muted small' }, acct) : null),
         h('td', { class: 'mono' }, b.keyHint ? String(b.keyHint) : h('span', { class: 'muted' }, DASH)),
-        h('td', null, sk ? [h('span', { class: 'badge dotted ' + STATE_BADGE[sk][0] }, STATE_BADGE[sk][1]), live.disabledReason ? h('div', { class: 'muted small' }, REASON_TEXT[live.disabledReason] || live.disabledReason) : null] : h('span', { class: 'muted' }, DASH)),
-        h('td', null, testResultEl(t) || h('span', { class: 'muted' }, 'not tested'), t && t.at && !t.pending ? h('div', { class: 'muted small' }, fmtAgo(t.at)) : null),
+        h('td', null, sk ? [h('span', { class: 'badge dotted ' + STATE_BADGE[sk][0] }, STATE_BADGE[sk][1]), live.disabledReason ? h('div', { class: 'muted small', title: REASON_TITLE[live.disabledReason] || null }, REASON_TEXT[live.disabledReason] || live.disabledReason) : null] : h('span', { class: 'muted' }, DASH)),
+        h('td', null, testResultEl(t) || h('span', { class: 'muted' }, DASH), t && t.at && !t.pending ? h('div', { class: 'muted small' }, fmtAgo(t.at)) : null),
         h('td', { class: 'right' }, h('div', { class: 'chain', style: 'justify-content:flex-end' },
-          b.keyless ? null : h('button', { class: 'btn sm', type: 'button', 'data-fk': 'key-' + b.name, onclick: () => openKeyModal(b) }, b.keySource === 'dashboard' ? 'Replace key' : 'Add key'),
-          b.keySource === 'dashboard' ? h('button', { class: 'btn sm danger', type: 'button', 'data-fk': 'rmkey-' + b.name, onclick: () => removeKey(b) }, 'Remove dashboard key') : null,
+          b.keyless ? null : h('button', { class: 'btn sm', type: 'button', 'data-fk': 'key-' + b.name, onclick: () => openKeyModal(b) }, b.keySource === 'dashboard' ? 'Replace' : 'Add key'),
+          b.keySource === 'dashboard' ? h('button', { class: 'btn sm danger', type: 'button', 'data-fk': 'rmkey-' + b.name, title: 'Remove dashboard key · falls back to .env', onclick: () => removeKey(b) }, 'Remove') : null,
           h('button', { class: 'btn sm', type: 'button', 'data-fk': 'btest-' + b.name, disabled: !(b.configured || b.keyless) || (state.tests[b.name] && state.tests[b.name].pending) ? true : null, onclick: () => runTest(b.name, rr) }, 'Test'))));
-    })))) : empty(null, 'No built-in providers reported.'),
-    h('p', { class: 'note' }, 'Keys are never shown in full. Removing a dashboard key falls back to the .env value, if any.'));
+    })))) : empty(null, 'No built-in providers', 'plug'));
   const custom = Array.isArray(D.custom) ? D.custom : [];
   mount('set-custom', custom.length ? h('div', { class: 'table-wrap' }, h('table', null,
     h('thead', null, h('tr', null, ['Enabled', 'Provider', 'Base URL', 'Models', 'Price / 1M (in · out)', 'Last test', ''].map((t, i) => h('th', { class: i === 6 ? 'right' : null }, t)))),
@@ -1867,21 +1889,21 @@ function renderSettings() {
       return h('tr', null,
         h('td', null, h('label', { class: 'switch', title: c.enabled ? 'Disable' : 'Enable' },
           h('input', { type: 'checkbox', 'data-fk': 'en-' + c.id, checked: c.enabled ? true : null, 'aria-label': `Enable ${c.name}`, onchange: e => toggleCustom(c, e.target.checked) }), h('i'))),
-        h('td', null, h('div', { style: 'font-weight:600' }, c.label || c.name), h('div', { class: 'muted small mono' }, c.name), c.keyHint ? h('div', { class: 'muted small mono' }, 'key ' + c.keyHint) : h('div', { class: 'muted small' }, c.local ? 'local · no key needed' : c.hasKey ? 'key set' : 'no key')),
+        h('td', null, h('div', { style: 'font-weight:600' }, c.label || c.name), h('div', { class: 'muted small mono' }, c.name), c.keyHint ? h('div', { class: 'muted small mono' }, 'key ' + c.keyHint) : h('div', { class: 'muted small' }, c.local ? 'local' : c.hasKey ? 'key set' : 'No key')),
         h('td', { class: 'mono wrap', style: 'max-width:240px' }, c.baseUrl || DASH),
         h('td', { class: 'small' }, TIERS.map(tr => models[tr] ? h('div', null, h('span', { class: 'muted' }, tr + ' '), h('span', { class: 'mono' }, truncate(models[tr], 32))) : null), models.light || models.standard || models.heavy ? null : (c.model || DASH)),
         h('td', { class: 'num' }, c.price ? `${fmtUsd(num(c.price.prompt))} · ${fmtUsd(num(c.price.completion))}` : DASH),
-        h('td', null, testResultEl(t) || h('span', { class: 'muted' }, 'never'), t && t.at ? h('div', { class: 'muted small' }, fmtAgo(t.at)) : null),
+        h('td', null, testResultEl(t) || h('span', { class: 'muted' }, DASH), t && t.at ? h('div', { class: 'muted small' }, fmtAgo(t.at)) : null),
         h('td', { class: 'right' }, h('div', { class: 'chain', style: 'justify-content:flex-end' },
           h('button', { class: 'btn sm', type: 'button', 'data-fk': 'ctest-' + c.id, disabled: state.tests[c.name] && state.tests[c.name].pending ? true : null, onclick: () => runTest(c.name, rr) }, 'Test'),
           h('button', { class: 'btn sm', type: 'button', 'data-fk': 'cedit-' + c.id, onclick: () => openCustomModal(c) }, 'Edit'),
           h('button', { class: 'btn sm danger', type: 'button', 'data-fk': 'cdel-' + c.id, onclick: () => deleteCustom(c) }, 'Delete'))));
-    })))) : empty('No custom providers yet', 'Add any OpenAI-compatible endpoint (Together, Fireworks, DeepInfra, a local vLLM …).'));
+    })))) : empty(null, 'No custom providers', 'plug'));
 }
 async function removeKey(b) {
-  if (!window.confirm(`Remove the dashboard key for ${b.label || b.name}?\n\nThe gateway falls back to the .env key if one is set.`)) return;
+  if (!window.confirm(`Remove dashboard key for ${b.label || b.name}? Falls back to .env.`)) return;
   const r = await adminFetch('DELETE', `/v1/admin/providers/builtin/${encodeURIComponent(b.name)}/key`);
-  if (r.ok) { banner(`Dashboard key removed for ${b.label || b.name}.`, 'good'); delete state.tests[b.name]; } else banner(r.message, 'crit');
+  if (r.ok) { banner(`Key removed · ${b.label || b.name}`, 'good'); delete state.tests[b.name]; } else banner(r.message, 'crit');
   loadAdmin();
 }
 async function toggleCustom(c, enabled) {
@@ -1890,7 +1912,7 @@ async function toggleCustom(c, enabled) {
   loadAdmin();
 }
 async function deleteCustom(c) {
-  if (!window.confirm(`Delete custom provider "${c.name}"?\n\nIts stored key is removed and it stops receiving traffic immediately.`)) return;
+  if (!window.confirm(`Delete "${c.name}" and its stored key?`)) return;
   const r = await adminFetch('DELETE', `/v1/admin/providers/custom/${encodeURIComponent(c.id)}`);
   if (r.ok) { banner(`Deleted ${c.name}.`, 'good'); delete state.tests[c.name]; } else banner(r.message, 'crit');
   loadAdmin();
@@ -1938,8 +1960,8 @@ function openKeyModal(b) {
   const key = h('input', { type: 'password', name: 'apiKey', autocomplete: 'new-password', required: true, placeholder: 'Paste API key' });
   const acct = b.needsAccountId ? h('input', { type: 'text', name: 'accountId', autocomplete: 'off', placeholder: 'Account ID' }) : null;
   openModal(`${b.keySource === 'dashboard' ? 'Replace' : 'Add'} key · ${b.label || b.name}`,
-    'Stored encrypted on the gateway (AES-256-GCM) and used instead of the .env value. It is never shown again; only a short hint is kept.',
-    [field('API key', key), acct ? field('Account ID', acct, 'Required by this provider (for example, Cloudflare account ID).') : null],
+    'Encrypted (AES-256-GCM) · overrides .env',
+    [field('API key', key), acct ? field('Account ID', acct) : null],
     async () => {
       const apiKey = key.value.trim();
       if (!apiKey) { key.focus(); return 'Enter an API key.'; }
@@ -1949,7 +1971,7 @@ function openKeyModal(b) {
       key.value = '';
       if (!r.ok) return r.message;
       closeModal(); delete state.tests[b.name];
-      banner(`Key saved for ${b.label || b.name}. Use Test to confirm it works.`, 'good');
+      banner(`Key saved · ${b.label || b.name}`, 'good');
       loadAdmin();
       return null;
     }, 'Save key');
@@ -1992,16 +2014,16 @@ function openCustomModal(c) {
       h('div', null, h('span', { class: 'badge ' + pc }, pl), ' ', p.note || ''),
       link ? h('div', null, 'Get a key: ', h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, link)) : null));
   });
-  openModal(editing ? `Edit ${c.name}` : 'Add custom provider', 'Any OpenAI-compatible /chat/completions endpoint. It joins smart routing immediately.',
-    [presetSel ? field('Preset', presetSel, 'Prefills base URL and model. Free-tier limits change often; check the provider.') : null, note,
-      h('div', { class: 'row2' }, field('Name', f.name, editing ? 'Name cannot be changed' : 'Lowercase slug, unique'), field('Base URL', f.baseUrl)),
-      field('API key', f.apiKey, 'Stored encrypted; never displayed again.'),
-      clearKey ? h('label', { class: 'check' }, clearKey, 'Remove the stored key') : null,
+  openModal(editing ? `Edit ${c.name}` : 'Add custom provider', 'OpenAI-compatible /chat/completions',
+    [presetSel ? field('Preset', presetSel) : null, note,
+      h('div', { class: 'row2' }, field('Name', f.name, editing ? 'Fixed' : 'Lowercase slug'), field('Base URL', f.baseUrl)),
+      field('API key', f.apiKey, 'Encrypted · write-only'),
+      clearKey ? h('label', { class: 'check' }, clearKey, 'Remove stored key') : null,
       field('Default model', f.model),
       h('div', { class: 'row2' }, field('Light model', f.modelLight), field('Heavy model', f.modelHeavy)),
-      field('Quality', h('div', { class: 'range-row' }, f.quality, qOut), 'How strong the model is (0–1); used when ranking for the quality policy.'),
-      h('div', { class: 'row2' }, field('Prompt price (USD / 1M tokens)', f.pricePrompt), field('Completion price (USD / 1M tokens)', f.priceCompletion)),
-      h('label', { class: 'pg-controls', style: 'margin:0' }, h('label', null, f.enabled, ' Enabled for routing'))],
+      field('Quality', h('div', { class: 'range-row' }, f.quality, qOut), '0–1 · used for ranking'),
+      h('div', { class: 'row2' }, field('Input $ / 1M', f.pricePrompt), field('Output $ / 1M', f.priceCompletion)),
+      h('label', { class: 'pg-controls', style: 'margin:0' }, h('label', null, f.enabled, ' Enabled'))],
     async () => {
       const body = {};
       if (!editing) {
@@ -2023,7 +2045,7 @@ function openCustomModal(c) {
       f.apiKey.value = '';
       if (!r.ok) return r.message;
       closeModal();
-      banner(editing ? `Saved ${c.name}.` : `Added ${body.name}. Use Test to confirm it responds.`, 'good');
+      banner(editing ? `Saved ${c.name}` : `Added ${body.name}`, 'good');
       loadAdmin();
       return null;
     }, editing ? 'Save changes' : 'Add provider');
@@ -2034,15 +2056,7 @@ $('btn-add-custom').addEventListener('click', () => openCustomModal(null));
    Routing between pages
    ========================================================= */
 const ROUTES = { overview: 'Overview', analytics: 'Analytics', providers: 'Providers', routing: 'Routing', logs: 'Request logs', playground: 'Playground', settings: 'Keys & providers' };
-const SUBTITLES = {
-  overview: 'Live health, traffic and spend across every upstream',
-  analytics: 'Historical traffic, latency, cost, failover and cache efficiency',
-  providers: 'Health, capacity and latency per upstream provider',
-  routing: 'How requests are matched to providers, and why',
-  logs: 'Every request with its attempt chain, routing and cache outcome',
-  playground: 'Send a prompt through the full pipeline: cache, routing and failover',
-  settings: 'API keys for built-in providers and your own OpenAI-compatible endpoints'
-};
+const SUBTITLES = { overview: '', analytics: '', providers: '', routing: '', logs: '', playground: '', settings: '' };
 function currentRoute() { const r = location.hash.replace(/^#\/?/, ''); return r in ROUTES ? r : 'overview'; }
 function setNav(open) {
   $('app').classList.toggle('nav-open', open);
@@ -2092,7 +2106,7 @@ function renderLive(M) {
   const usable = new Set(Object.entries(M.providers).filter(([, p]) => p.configured !== false && p.state !== 'unconfigured').map(([n]) => n));
   const custom = state.admin.data && Array.isArray(state.admin.data.custom) ? state.admin.data.custom : [];
   for (const c of custom) if (c && c.enabled && c.name) usable.add(c.name);
-  syncSelect($('pg-provider'), [...usable].sort(), 'Auto (smart routing)');
+  syncSelect($('pg-provider'), [...usable].sort(), 'Auto');
   renderConn();
 }
 function ingest(data) {
@@ -2153,14 +2167,14 @@ function banner(text, cls) {
   setTimeout(close, cls === 'crit' ? 9000 : 5000);
 }
 $('btn-reset').addEventListener('click', async () => {
-  if (!window.confirm('Reset all gateway data?\n\nThis clears the semantic cache, live stats, circuit breakers and the MongoDB request history.')) return;
+  if (!window.confirm('Reset cache, stats, breakers and MongoDB history?')) return;
   const btn = $('btn-reset'); btn.disabled = true;
   try {
     const res = await fetch('/v1/chat/reset', { method: 'POST' });
     let data = {}; try { data = await res.json(); } catch { /* non-JSON */ }
     if (!res.ok || data.ok === false) throw new Error(errMsg(data, res.status));
     state.expanded.clear(); state.history = [];
-    banner(`Reset complete${isNum(data.deletedCount) ? ` · removed ${data.deletedCount} MongoDB records` : ''}.`, 'good');
+    banner(`Reset${isNum(data.deletedCount) ? ` · ${data.deletedCount} records removed` : ''}`, 'good');
     pollOnce();
     if (state.route === 'analytics') loadAnalytics(true);
   } catch (err) { banner('Reset failed: ' + err.message, 'crit'); }
@@ -2172,7 +2186,7 @@ $('btn-reset').addEventListener('click', async () => {
    ========================================================= */
 function pgResult(res, data, elapsed) {
   const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v === null || v === undefined || v === '' ? DASH : v));
-  if (res.status === 202) return [h('div', { class: 'answer' }, 'Request queued: the rate limit bucket is empty. It will be processed when tokens refill.'), data && data.jobId ? h('p', { class: 'note' }, 'Job id: ' + String(data.jobId)) : null];
+  if (res.status === 202) return [h('div', { class: 'answer' }, 'Queued · rate limit reached'), data && data.jobId ? h('p', { class: 'note' }, 'Job ' + String(data.jobId)) : null];
   if (!res.ok || (data && data.error)) {
     const e = (data && data.error) || {};
     const msg = typeof e === 'string' ? e : e.message || ('HTTP ' + res.status);
@@ -2181,9 +2195,8 @@ function pgResult(res, data, elapsed) {
       const ra = (res.headers && res.headers.get && res.headers.get('Retry-After')) || e.retryAfter || e.retry_after;
       const secs = Number(ra);
       return [h('div', { class: 'warnbox', role: 'alert' },
-        h('div', null, h('b', null, 'Gateway at capacity'), ' · every provider able to serve this request is busy or over its rate limit.',
-          h('div', { style: 'margin-top:4px' }, Number.isFinite(secs) && secs > 0 ? `Retry in about ${secs}s.` : ra ? `Retry after ${ra}.` : 'Retry shortly.',
-            ' Allowing a quality downgrade lets the gateway use a lower tier instead.'),
+        h('div', { title: 'Every capable provider is busy or rate-limited. Allow downgrade to use a lower tier.' }, h('b', null, 'At capacity'),
+          ' · ' + (Number.isFinite(secs) && secs > 0 ? `retry in ${secs}s` : ra ? `retry after ${ra}` : 'retry shortly'),
           typeof msg === 'string' && msg !== 'HTTP 503' ? h('div', { class: 'small', style: 'margin-top:4px;opacity:.85' }, msg) : null)),
         routingDecisionCard(data && (data.routing || e.routing))];
     }
@@ -2198,7 +2211,7 @@ function pgResult(res, data, elapsed) {
     : Array.isArray(data.attempts) && data.attempts.length ? chainEl({ attempts: data.attempts }) : chainEl({ provider: data.provider, model: data.model, latencyMs: elapsed, status: 'ok' });
   let cacheText = 'miss';
   if (isHit) cacheText = `hit${isNum(cache.similarity) ? ' · similarity ' + cache.similarity.toFixed(4) : ''}${cache.verified ? ' · verified' : ''}${cache.original_provider ? ' · from ' + cache.original_provider : ''}`;
-  else if (isNum(cache.rejected_near_match)) cacheText = `miss · near match ${cache.rejected_near_match.toFixed(4)} rejected by verifier`;
+  else if (isNum(cache.rejected_near_match)) cacheText = `miss · near match ${cache.rejected_near_match.toFixed(4)} rejected`;
   else if (cache.bypassed || cache.bypass) cacheText = 'bypassed';
   return [
     rt.downgrade && typeof rt.downgrade === 'object' ? h('div', { class: 'warnbox', style: 'margin-bottom:12px' }, h('b', null, `Downgraded ${rt.downgrade.from || '?'} → ${rt.downgrade.to || '?'}`), rt.downgrade.reason ? ': ' + rt.downgrade.reason : '') : null,
@@ -2237,17 +2250,15 @@ async function sendPrompt() {
     let data; try { data = JSON.parse(raw); } catch { data = { error: { message: raw.slice(0, 500) || 'Non-JSON response' } }; }
     mount('pg-out', pgResult(res, data, performance.now() - t0));
   } catch (err) { mount('pg-out', h('div', { class: 'answer err' }, 'Network error: ' + err.message)); }
-  finally { btn.disabled = false; btn.textContent = 'Send request'; pollOnce(); }
+  finally { btn.disabled = false; btn.textContent = 'Send'; pollOnce(); }
 }
 const EXAMPLES = [
-  ['Factual · light', 'What is the capital of Australia?'],
-  ['Code · standard', 'Write a Python function that checks whether a string is a palindrome.'],
-  ['Reasoning · heavy', 'Prove step by step that the square root of 2 is irrational.'],
-  ['Time-sensitive · bypasses cache', 'What is the weather in Paris today?']
+  ['Factual', 'What is the capital of Australia?'],
+  ['Code', 'Write a Python function that checks whether a string is a palindrome.'],
+  ['Reasoning', 'Prove step by step that the square root of 2 is irrational.']
 ];
 function pgIntro() {
-  mount('pg-out', h('div', { class: 'empty', style: 'padding:40px 16px' }, icon('chart'), h('b', null, 'Responses appear here'),
-    h('span', null, 'with the answer, the routing decision, cost estimate and every provider attempt.'),
+  mount('pg-out', h('div', { class: 'empty', style: 'padding:40px 16px' }, icon('inbox'), h('span', null, 'No response yet'),
     h('div', { class: 'chain', style: 'justify-content:center;margin-top:12px' }, EXAMPLES.map(([label, text]) =>
       h('button', { class: 'btn sm', type: 'button', title: text, onclick: () => { $('pg-prompt').value = text; $('pg-prompt').focus(); } }, label)))));
 }
